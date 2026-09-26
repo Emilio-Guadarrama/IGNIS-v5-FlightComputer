@@ -3,3 +3,72 @@ Version=1.0
 
 [Project1]
 ProjectPath=PCB_Project_IGNIS-v5\PCB_Project_IGNIS-v5.PrjPcb
+
+[Project2]
+ProjectPath=PCB_Project_IGNIS-v5\Components\Barometric pressure sensor - BMP280\BMP280\BMP280.LibPkg
+
+[Project3]
+ProjectPath=PCB_Project_IGNIS-v5\Components\Button - SKRPABE010 Micro Switch - 4.6×3.2×2.5 mm\SKRPABE010\SKRPABE010.LibPkg
+
+[Project4]
+ProjectPath=PCB_Project_IGNIS-v5\Components\Buzzer - BWSMA-KE-Z001 or CMI-1275C-050\CMI-1275C-050\CMI-1275C-050.LibPkg
+
+[Project5]
+ProjectPath=PCB_Project_IGNIS-v5\Components\GPS module - SAM-M10Q-00B (GNSS)\SAM-M10Q-00B\SAM-M10Q-00B.LibPkg
+
+[Project6]
+ProjectPath=PCB_Project_IGNIS-v5\Components\JST-SH 4-pin right-angle (UART)\SM04B-SRSS-TB_LF__SN_\SM04B-SRSS-TB_LF__SN_.LibPkg
+
+[Project7]
+ProjectPath=PCB_Project_IGNIS-v5\Components\LDO 3.3 V - AMS1117-3.3 - SOT-223\AMS1117-3.3\AMS1117-3.3.LibPkg
+
+[Project8]
+ProjectPath=PCB_Project_IGNIS-v5\Components\LDO 5 V - AMS1117-5.0 - SOT-223\AMS1117-5.0\AMS1117-5.0.LibPkg
+
+[Project9]
+ProjectPath=PCB_Project_IGNIS-v5\Components\LED RGB - WS2812B\LED_RGB_WS2812B.LibPkg
+
+[Project10]
+ProjectPath=PCB_Project_IGNIS-v5\Components\LED SMD 0805\SML-LXT0805IW-TR\SML-LXT0805IW-TR.LibPkg
+
+[Project11]
+ProjectPath=PCB_Project_IGNIS-v5\Components\Mosfet N 60v 5A - NCE6005AR - SOT-223\NCE6005AR_Mosfet_N.LibPkg
+
+[Project12]
+ProjectPath=PCB_Project_IGNIS-v5\Components\N-channel MOSFET Transistor, 0.27 A, 30 V - NTS4001NT1G -  SC-70 (Buzzer)\NTS4001NT1G\NTS4001NT1G.LibPkg
+
+[Project13]
+ProjectPath=PCB_Project_IGNIS-v5\Components\Optoisolator - TLP521GB-S - SOP-4_P2.54\PC817X2NIP1B\PC817X2NIP1B.LibPkg
+
+[Project14]
+ProjectPath=PCB_Project_IGNIS-v5\Components\RF Module (LoRa) - RFM95W\Antenna-RFM95W-868S2\RFM95W-915S2.LibPkg
+
+[Project15]
+ProjectPath=PCB_Project_IGNIS-v5\Components\Schottky Diode - SS24\SS24\SS24.LibPkg
+
+[Project16]
+ProjectPath=PCB_Project_IGNIS-v5\Components\Screw Terminal 6-pin 5.08 mm - 1729160\6-pin 5.08 mm - 1729160\6-pin 5.08 mm - 1729160.LibPkg
+
+[Project17]
+ProjectPath=PCB_Project_IGNIS-v5\Components\SMA port - BWSMA-KE-Z001\BWSMA-KE-Z001\BWSMA-KE-Z001.LibPkg
+
+[Project18]
+ProjectPath=PCB_Project_IGNIS-v5\Components\Switching diode (buzzer flyback) - 1N4148W\1N4148W\1N4148W.LibPkg
+
+[Project19]
+ProjectPath=PCB_Project_IGNIS-v5\Components\Transistor NPN 500mA 25V - S8050 - SOT-23\SMD-TRANSISTORS-NPN-25V-500MW_SOT-23_\S8050.LibPkg
+
+[Project20]
+ProjectPath=PCB_Project_IGNIS-v5\Components\Transistor PNP 1.5A 25V - SS8550 - SOT-23\SS8550\SS8550.LibPkg
+
+[Project21]
+ProjectPath=PCB_Project_IGNIS-v5\Components\USB ESD diode - ESD9B5.0ST5G\ESD9B5.0ST5G\ESD9B5.0ST5G.LibPkg
+
+[Project22]
+ProjectPath=PCB_Project_IGNIS-v5\Components\USB-C 16-pin (USB 2.0) - TYPE-C-31-M-12\TYPE-C-31-M-12\TYPE-C-31-M-12.LibPkg
+
+[Project23]
+ProjectPath=PCB_Project_IGNIS-v5\Components\ESP32\ESP32-S3-WROOM-1-N16R8.LibPkg
+
+[Project24]
+ProjectPath=PCB_Project_IGNIS-v5\Components\Connector (yellow) - XT30APW-M\XT30PW-M\XT30PW-M.LibPkg
