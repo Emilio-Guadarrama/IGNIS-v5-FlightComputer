@@ -72,3 +72,6 @@ ProjectPath=PCB_Project_IGNIS-v5\Components\ESP32\ESP32-S3-WROOM-1-N16R8.LibPkg
 
 [Project24]
 ProjectPath=PCB_Project_IGNIS-v5\Components\Connector (yellow) - XT30APW-M\XT30PW-M\XT30PW-M.LibPkg
+
+[Project25]
+ProjectPath=PCB_Project_IGNIS-v5\Components\6-axis IMU - LSM6DSV32XTR\LSM6DSV32XTR\LSM6DSV32XTR.LibPkg
