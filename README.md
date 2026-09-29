@@ -59,6 +59,48 @@ previous versions. **All the areas of opportunity identified in earlier revision
 
 ---
 
+## System Architecture
+
+```mermaid
+flowchart TD
+    BAT[VBAT<br/>vehicle battery]
+
+    BAT --> LDO5[AMS1117-5.0<br/>VBAT to 5 V]
+    LDO5 --> RAIL5[5 V rail]
+    USB[USB-C 2.0] --> ORING[Schottky power path]
+    ORING --> RAIL5
+    RAIL5 --> LDO33[AMS1117-3.3<br/>5 V to 3.3 V]
+    LDO33 --> RAIL33[3.3 V rail]
+
+    USB --> USBPROT[ESD protection]
+    USBPROT --> MCU[ESP32-S3-WROOM-1-N16R8<br/>16 MB Flash / 8 MB PSRAM]
+    BAT --> VMON[Battery voltage divider]
+    VMON --> MCU
+
+    RAIL33 --> IMU[LSM6DSV32X IMU<br/>±32 g / ±4000 dps]
+    RAIL33 --> BARO[DPS368 barometer<br/>BMP280 footprint compatible]
+    RAIL33 --> GNSS[u-blox SAM-M10Q GNSS]
+    RAIL33 --> LORA[RFM95W LoRa<br/>915 MHz]
+    RAIL33 --> SD[MicroSD<br/>SPI + card detect]
+
+    IMU --> MCU
+    BARO --> MCU
+    GNSS --> MCU
+    MCU <--> LORA
+    MCU <--> SD
+    LORA --> ANT[SMA antenna]
+
+    MCU --> PYRO[2 × optically isolated<br/>pyro channels]
+    BAT --> PYRO
+    PYRO --> CONT[Continuity sensing]
+    CONT --> MCU
+
+    MCU --> IND[3 × WS2812B · status LEDs<br/>piezo buzzer]
+    MCU <--> DEBUG[JST-SH 4-pin UART debug]
+```
+
+---
+
 ## Project Structure
 
 ```
