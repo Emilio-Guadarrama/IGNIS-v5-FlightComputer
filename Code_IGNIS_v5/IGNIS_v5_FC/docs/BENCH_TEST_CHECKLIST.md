@@ -1,4 +1,4 @@
-# IGNIS v5 preliminary firmware: bench test checklist
+# IGNIS v5 SINGLE-DEPLOY preliminary firmware: bench test checklist
 
 **Inert loads only.** No e-matches, igniters or energetics in the room for any
 test on this sheet. Use an inert e-match simulator on each pyro terminal (e.g.
@@ -29,7 +29,7 @@ Firmware builds referenced below:
 
 | # | Test | Pass criterion | Done |
 |---|---|---|---|
-| 1.1 | Power on (RBF), read serial banner | Version, git hash, app sha256, `GROUND_TEST_MODE=0`, `SINGLE_EVENT_MODE=1` printed | ☐ |
+| 1.1 | Power on (RBF), read serial banner | Version, `SINGLE-DEPLOY`, git hash, app sha256, `GROUND_TEST_MODE=0`, pulse 500 ms / backup +500 ms / max 3 printed | ☐ |
 | 1.2 | Compare the banner sha256 with `sha256sum` of the flashed `.bin` | Match | ☐ |
 | 1.3 | Power-cycle 3× via RBF | `boot_count` +1 each time; `reset_reason 1 POWERON` | ☐ |
 | 1.4 | Record the `reset_reason` produced by: EN button, USB re-enumeration, RBF cut, slow PSU dip to brownout | Table filled in. **This settles the POWERON assumption for v5** | ☐ |
@@ -51,21 +51,29 @@ Firmware builds referenced below:
 |---|---|---|---|
 | 3.1 | No load connected | State `SAFE`; dashboard OTA gate "open" | ☐ |
 | 3.2 | Connect an inert load | `ARMED` immediately; returns to `SAFE` ≥1 s after removal | ☐ |
-| 3.3 | Chamber profile ground → apogee → descent | Gate LED on CH1 lights only after apogee; `deploy_trigger=1`; one pulse of 1000 ms | ☐ |
+| 3.3 | Chamber profile ground → apogee → descent, **remove each load right after its first pulse** (simulates a burned-open e-match) | CH1 pulse 500 ms only after apogee, CH2 pulse starts at its end; one attempt each; `deploy_trigger=1`; never both LEDs at once | ☐ |
+| 3.3b | Same, but leave both inert loads connected (simulates e-matches that did not ignite) | CH1, CH2, CH1, CH2, CH1, CH2 (3 attempts each), all within ~3 s; `pyroN_attempts=3` in the SD log | ☐ |
+| 3.3c | Same, CH2 load absent on the pad | CH2 fires once (backup always), no CH2 retries | ☐ |
 | 3.4 | Repeat 3.3, but disconnect the barometer after the chamber has passed 1.5 m simulated altitude | `deploy_trigger=2` at `APOGEE_TIMEOUT_MS` after burnout | ☐ |
 | 3.5 | Short jerk (< 250 ms) in a FLIGHT build | No `BOOST` | ☐ |
-| 3.6 | SD log around the fire | Rows continuous through the fire; flushed at ≤100 ms in the 4 s window | ☐ |
+| 3.6 | SD log around the fire | Rows continuous through the sequence; flushed at ≤100 ms in the 4 s window | ☐ |
+| 3.7 | **Live-e-match test is outside this sheet**: schedule a separate, approved test of ignition with a 500 ms pulse on the flight battery, and of how fast continuity reads open after ignition | Avionics Lead sign-off | ☐ |
 
-## 4. No restart after ignition (requirement A)
+## 4. Unwanted reboot handling (requirement A, as changed for SINGLE-DEPLOY)
+
+Produce non-power-on resets with a slow PSU dip to brownout (record the
+`reset_reason` it gives, see 1.4). GROUND build, inert loads, chamber.
 
 | # | Test | Pass criterion | Done |
 |---|---|---|---|
-| 4.1 | After 3.3 (CH1 commanded), dip PSU to cause a brownout reset (not POR) | Boots into `RECOVERY`; banner says pyro locked out; WiFi does not start | ☐ |
-| 4.2 | In RECOVERY, run the chamber profile again | **No gate activity on either channel**; SD + LoRa running; telemetry `state=8`, `reset_reason` shown, `pyro1_fired=1` | ☐ |
-| 4.3 | Hold BOOT 3 s in RECOVERY | AP does not start | ☐ |
-| 4.4 | RBF power cycle | `NORMAL`, flags cleared, `SAFE`/`ARMED` again | ☐ |
-| 4.5 | BOOST only (shake/chamber, no apogee), then brownout | `RECOVERY` (flight_in_progress flag) | ☐ |
-| 4.6 | Re-flash over USB after a fire (no power cycle) | Note the reset reason; expected `RECOVERY` until RBF power cycle | ☐ |
+| 4.1 | Reset during COAST (before apogee) | Banner `RESUME_ASCENT`; deployment sequence at apogee as in 3.3; WiFi does not start | ☐ |
+| 4.2 | Leave both loads connected; reset ~0.2 s after CH1's first pulse while the chamber still reads > 1.5 m (GROUND) | Banner `RESUME_DESCENT`; CH1 retried and CH2 fired; total attempts per channel never exceed 3 across both boots | ☐ |
+| 4.3 | Remove both loads (burned-open), reset during descent | `RESUME_DESCENT`; **no gate activity** | ☐ |
+| 4.4 | Loads connected, chamber at ground pressure (on the ground), reset in descent before LANDED | **No gate activity** (airborne gate) | ☐ |
+| 4.5 | Reset after LANDED | `RECOVERY`; no gate activity; LoRa + SD running; `state=8` in telemetry | ☐ |
+| 4.6 | Hold BOOT 3 s after any resumed/RECOVERY boot | AP does not start | ☐ |
+| 4.7 | RBF power cycle | `NORMAL`, state cleared, `SAFE`/`ARMED` again | ☐ |
+| 4.8 | Re-flash over USB after a sequence (no power cycle) | Note the reset reason and boot mode; return to NORMAL only via RBF | ☐ |
 
 ## 5. Shared SPI, SD and LoRa
 
