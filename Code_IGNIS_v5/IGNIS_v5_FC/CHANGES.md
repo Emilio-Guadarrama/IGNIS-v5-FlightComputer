@@ -204,8 +204,10 @@ Needs your approval and a ground-station update.
 | Build | Flags | Result |
 |---|---|---|
 | FLIGHT | defaults | OK, 0 warnings in `src/`, app 1,066,406 B, RAM 53,148 B |
-| No WiFi/OTA | `-DIGNIS_ENABLE_WIFI=0 -DIGNIS_ENABLE_OTA=0` | see the final summary |
-| Guard | `-DGROUND_TEST_MODE=1` with flight build | must fail with `#error` (see the final summary) |
+| No WiFi/OTA | `-DIGNIS_ENABLE_WIFI=0 -DIGNIS_ENABLE_OTA=0` | OK, 0 warnings in `src/`, app 446,543 B, RAM 26,228 B |
+| Guard | `-DGROUND_TEST_MODE=1` (flight build) | Fails with `#error "GROUND_TEST_MODE must be 0 when IGNIS_FLIGHT_BUILD is 1."` (checked by preprocessing `config_v5.h` with host clang; the full ESP32 rebuild was stopped to save time) |
+| Guard | `-DIGNIS_ENABLE_WIFI=0` alone | Fails with `#error "IGNIS_ENABLE_OTA requires IGNIS_ENABLE_WIFI."` (host clang) |
+| Not built | GROUND build (`-DIGNIS_FLIGHT_BUILD=0 -DGROUND_TEST_MODE=1`) on ESP32 | Compile it before bench section 3 |
 
 ---
 
