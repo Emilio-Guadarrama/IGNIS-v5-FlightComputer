@@ -153,14 +153,38 @@ RE_BOOT = re.compile(
     r"BOOT\s+count:\s*(?P<count>\d+)\s+reset_reason:\s*(?P<reason>\d+)\s*(?P<reason_name>\S+)?"
 )
 
-# Flight states in the order the FC firmware enumerates them.
+# Flight states in the order the IGNIS v5 SINGLE-DEPLOY firmware enumerates
+# them (Code_IGNIS_v5/IGNIS_v5_FC/src/core/flight_types.h). Same numeric codes
+# 0..7 as before; 0 is now SAFE (pad, no continuity), 5 is DESCENT (single
+# deployment, under the parachute), 6 is unused, 8 is the new RECOVERY
+# (FC rebooted after landing / without a usable flight record: pyro locked out).
 FLIGHT_STATES: Final[list[str]] = [
-    "PAD_IDLE", "ARMED", "BOOST", "COAST", "APOGEE",
-    "DROGUE_DESCENT", "MAIN_DESCENT", "LANDED",
+    "SAFE", "ARMED", "BOOST", "COAST", "APOGEE",
+    "DESCENT", "MAIN_DESCENT", "LANDED", "RECOVERY",
 ]
-APOGEE_OR_LATER_STATES: Final[set[str]] = {
-    "APOGEE", "DROGUE_DESCENT", "MAIN_DESCENT", "LANDED",
+
+# Receiver sketches older than v5 print the pre-v5 names, and an unknown code
+# for the new RECOVERY state. Map them so the GUI and the CSV log always show
+# v5 names, whichever receiver firmware is connected.
+STATE_ALIASES: Final[dict[str, str]] = {
+    "PAD_IDLE": "SAFE",
+    "DROGUE_DESCENT": "DESCENT",
+    "MAIN_DESCENT(unused)": "MAIN_DESCENT",
+    "UNKNOWN(8)": "RECOVERY",
+    "OTHER(8)": "RECOVERY",
 }
+
+# States that prove the FC passed apogee. RECOVERY is NOT included: it can
+# also appear on the pad (e.g. a reset with unreadable storage), and must not
+# raise a false "APOGEE CONFIRMED".
+APOGEE_OR_LATER_STATES: Final[set[str]] = {
+    "APOGEE", "DESCENT", "MAIN_DESCENT", "LANDED",
+}
+
+
+def normalize_flight_state(name: str) -> str:
+    """Return the v5 name for a state string printed by any receiver sketch."""
+    return STATE_ALIASES.get(name, name)
 
 # ----------------------------------------------------------------------
 # CSV

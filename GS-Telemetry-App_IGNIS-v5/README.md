@@ -117,6 +117,25 @@ Para asignar puertos hay tres opciones rápidas:
 - las flechas `‹` y `›` cambian de COM directamente desde cada tarjeta;
 - pulsar el nombre `COMx` abre la cuadrícula visual completa.
 
+## Estados de vuelo (firmware IGNIS v5 SINGLE-DEPLOY)
+
+La app muestra siempre los nombres de estado de v5, aunque el sketch del
+receptor todavía imprima los nombres anteriores (`config.STATE_ALIASES`):
+
+| Código | v5 | Nombre anterior que también se acepta |
+|---|---|---|
+| 0 | `SAFE` (en rampa, sin continuidad) | `PAD_IDLE` |
+| 1 | `ARMED` | |
+| 2–4 | `BOOST`, `COAST`, `APOGEE` | |
+| 5 | `DESCENT` (bajo paracaídas, despliegue único) | `DROGUE_DESCENT` |
+| 6 | sin uso en v5 | `MAIN_DESCENT` |
+| 7 | `LANDED` | |
+| 8 | `RECOVERY` (el FC se reinició después de aterrizar o sin registro de vuelo; pirotecnia bloqueada) | `UNKNOWN(8)` |
+
+`APOGEE CONFIRMED` se activa con `APOGEE`, `DESCENT`, `MAIN_DESCENT` o
+`LANDED`. `RECOVERY` no lo activa, porque también puede ocurrir en rampa; en su
+lugar registra el evento `FC_RECOVERY` una vez por vuelo.
+
 ## Archivos
 
 ```text

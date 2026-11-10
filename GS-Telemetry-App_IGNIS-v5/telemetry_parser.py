@@ -41,6 +41,7 @@ from config import (
     RE_PWR,
     RE_PYRO,
     RE_SD_DASHBOARD,
+    normalize_flight_state,
 )
 
 
@@ -156,7 +157,8 @@ class DashboardBlockParser:
 
         m = RE_HEADER.search(text)
         if m:
-            frame.flight_state = m.group("state")
+            # v5 names whatever receiver sketch printed it (PAD_IDLE -> SAFE, ...)
+            frame.flight_state = normalize_flight_state(m.group("state"))
             frame.seq = int(m.group("seq"))
             frame.since_last_rx_ms = int(m.group("since_ms"))
         else:

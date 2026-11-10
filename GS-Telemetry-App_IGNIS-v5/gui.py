@@ -368,6 +368,7 @@ class MainWindow(QMainWindow):
         self._last_physics_seq: Optional[int] = None
         self._prev_altitude_sample: Optional[tuple[float, float]] = None
         self._apogee_seen = False
+        self._recovery_seen = False
         self._battery_alert_triggered = False
         self._flight_sd_state: Optional[str] = None
         self._flight_sd_updated_at: Optional[float] = None
@@ -445,7 +446,7 @@ class MainWindow(QMainWindow):
         self.overall_led.setFixedSize(12, 12)
         self.overall_status = QLabel("NO LINK")
         self.overall_status.setProperty("class", "HeaderStatus")
-        self.flight_state_badge = QLabel("PAD_IDLE")
+        self.flight_state_badge = QLabel("SAFE")
         self.flight_state_badge.setObjectName("FlightStateBadge")
         self.timer_label = QLabel("00:00:00")
         self.timer_label.setObjectName("MissionTimer")
@@ -801,6 +802,13 @@ class MainWindow(QMainWindow):
             self.apogee_status.style().polish(self.apogee_status)
             self.session_logger.log_event(frame.receiver_id, "APOGEE_DETECTED")
             self._append_log(frame.receiver_id, "", "", "", "Apogeo confirmado")
+        # v5: RECOVERY = FC rebooted after landing / without a usable flight
+        # record; logging + telemetry only, pyro locked out until power cycle.
+        if frame.flight_state == "RECOVERY" and not self._recovery_seen:
+            self._recovery_seen = True
+            self.session_logger.log_event(frame.receiver_id, "FC_RECOVERY")
+            self._append_log(frame.receiver_id, "", "", "",
+                             "FC en RECOVERY (reinicio): pirotecnia bloqueada hasta ciclo de energía")
         continuity = []
         if frame.pyro1_cont is not None:
             continuity.append("CH1 OK" if frame.pyro1_cont else "CH1 OPEN")
@@ -860,6 +868,7 @@ class MainWindow(QMainWindow):
         self._last_physics_seq = None
         self._prev_altitude_sample = None
         self._apogee_seen = False
+        self._recovery_seen = False
         self._battery_alert_triggered = False
         self.rssi_chart.start_new_flight()
         self.snr_chart.start_new_flight()
@@ -871,7 +880,7 @@ class MainWindow(QMainWindow):
             instrument.set_value(None, animated=False)
         for card in self.receiver_cards.values():
             card.reset_flight_values()
-        self.flight_state_badge.setText("PAD_IDLE")
+        self.flight_state_badge.setText("SAFE")
         self.timer_label.setText("00:00:00")
         self.gps_status.setText("GPS  — · SAT —")
         self.apogee_status.setText("APOGEE  NO")
