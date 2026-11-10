@@ -12,7 +12,7 @@ const char kCsvHeader[] =
     "pyro1_cont,pyro2_cont,pyro1_fired,pyro2_fired,"
     "tilt_deg,boot_count,reset_reason,deploy_trigger,"
     // v5 columns
-    "recovery_boot,post_fire,cont_valid,max_agl_m,baro_vel_mps,"
+    "boot_mode,post_fire,pyro1_attempts,pyro2_attempts,cont_valid,max_agl_m,baro_vel_mps,"
     "lora_tx_count,lora_last_ok,lora_skipped,sd_rows_dropped,wifi";
 
 size_t buildCsvRow(const FlightSnapshot& s, char* buf, size_t len) {
@@ -24,7 +24,7 @@ size_t buildCsvRow(const FlightSnapshot& s, char* buf, size_t len) {
       "%.2f,0,0.0,"                       // rssi/snr: TX-only radio (reference Telemetry.h:216-224)
       "%d,%d,%d,%d,"
       "%.1f,%u,%u,%u,"
-      "%d,%d,%d,%.1f,%.2f,"
+      "%u,%d,%u,%u,%d,%.1f,%.2f,"
       "%lu,%d,%lu,%lu,%u",
       (unsigned long)s.timestamp_ms, (unsigned)s.state,
       s.pressure_pa, s.baro_alt_m, s.agl_m, s.baro_temp_c, s.baro_valid ? 1 : 0,
@@ -34,7 +34,8 @@ size_t buildCsvRow(const FlightSnapshot& s, char* buf, size_t len) {
       s.battery_v,
       s.cont.ch1 ? 1 : 0, s.cont.ch2 ? 1 : 0, s.pyro1_fired ? 1 : 0, s.pyro2_fired ? 1 : 0,
       s.tilt_deg, (unsigned)s.boot_count, (unsigned)s.reset_reason, (unsigned)s.deploy_trigger,
-      s.recovery_boot ? 1 : 0, s.post_fire_latched ? 1 : 0, s.cont.valid ? 1 : 0,
+      (unsigned)s.boot_mode, s.post_fire_latched ? 1 : 0, (unsigned)s.pyro_attempts[0],
+      (unsigned)s.pyro_attempts[1], s.cont.valid ? 1 : 0,
       s.max_agl_m, s.baro_vel_mps,
       (unsigned long)s.lora_tx_count, s.lora_last_tx_ok ? 1 : 0,
       (unsigned long)s.lora_skipped, (unsigned long)s.sd_rows_dropped, (unsigned)s.wifi);

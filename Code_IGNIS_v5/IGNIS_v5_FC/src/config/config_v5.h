@@ -32,10 +32,17 @@
 #define GROUND_TEST_MIN_ALT_M      1.5f   // reference Config.h:224
 #define GROUND_TEST_DEBOUNCE_MS      40   // reference Config.h:225
 
-// Single-event recovery: CH2 (main) is never fired (reference Config.h:227-237).
-// Compile-time only, no runtime toggle.
-#ifndef SINGLE_EVENT_MODE
-#define SINGLE_EVENT_MODE 1
+// ---------------------------------------------------------------------------
+// DEPLOYMENT MODE: this firmware variant is SINGLE-DEPLOY (one parachute event
+// at apogee). CH1 = primary charge, CH2 = backup charge for the SAME event,
+// fired right after CH1's pulse. Replaces the reference SINGLE_EVENT_MODE
+// (Config.h:227-237, "CH2 never fired") at the Avionics Lead's request.
+// Compile-time only, no runtime toggle. SAFETY-CRITICAL, PENDING SIGN-OFF.
+// ---------------------------------------------------------------------------
+#define IGNIS_DEPLOY_MODE_SINGLE_WITH_BACKUP 1
+#define IGNIS_DEPLOY_MODE IGNIS_DEPLOY_MODE_SINGLE_WITH_BACKUP
+#if IGNIS_DEPLOY_MODE != IGNIS_DEPLOY_MODE_SINGLE_WITH_BACKUP
+#error "Only the SINGLE-DEPLOY (CH2 = backup charge) mode exists in this firmware variant."
 #endif
 
 // ---------------------------------------------------------------------------
@@ -54,14 +61,20 @@
 // ---------------------------------------------------------------------------
 // REBOOT POLICY (requirement A). SAFETY-CRITICAL, PENDING SIGN-OFF.
 // ---------------------------------------------------------------------------
-// After a non-power-on reset with the flight-in-progress or post-fire flag
-// set, the FC boots into RECOVERY: logging + telemetry only, the FSM can never
-// produce a fire request, and pyro_hw refuses every fire call.
-// This is the ONLY policy implemented. Any other value fails to compile.
-#define REBOOT_POLICY_NEVER_FIRE_AFTER_REBOOT 1
-#define REBOOT_FIRE_POLICY REBOOT_POLICY_NEVER_FIRE_AFTER_REBOOT
-#if REBOOT_FIRE_POLICY != REBOOT_POLICY_NEVER_FIRE_AFTER_REBOOT
-#error "Only REBOOT_POLICY_NEVER_FIRE_AFTER_REBOOT is implemented and reviewed."
+// After an unwanted (non-power-on) reset the FC resumes from the persisted
+// flight phase (core/boot_policy.h):
+//   BOOST/COAST      -> resume ascent; deployment at apogee as normal.
+//   DESCENT          -> resume descent; a channel is re-fired ONLY if it still
+//                       reads continuity (ignition not detected) and it has
+//                       attempts left; CH2 backup fires if it never did. Only
+//                       while airborne (valid baro, AGL >= RESUME_MIN_AGL_M)
+//                       and within PYRO_SEQUENCE_WINDOW_MS of the reboot.
+//   LANDED / unknown -> RECOVERY: logging + telemetry, pyro locked out.
+// Attempt counts are persisted, so the per-channel cap holds across reboots.
+#define REBOOT_POLICY_RESUME_RETRY_IF_INTACT 2
+#define REBOOT_FIRE_POLICY REBOOT_POLICY_RESUME_RETRY_IF_INTACT
+#if REBOOT_FIRE_POLICY != REBOOT_POLICY_RESUME_RETRY_IF_INTACT
+#error "Only REBOOT_POLICY_RESUME_RETRY_IF_INTACT is implemented and reviewed."
 #endif
 
 // The flags are cleared ONLY on this reset reason (esp_reset_reason_t value).
@@ -74,7 +87,6 @@
 // ---------------------------------------------------------------------------
 #define SEA_LEVEL_PRESSURE_PA        101325.0f // Config.h:104
 #define GROUND_PRESSURE_CAL_SAMPLES  20        // Config.h:115
-#define MAIN_DEPLOY_ALT_AGL_M        450.0f    // Config.h:143
 #define BOOST_ACCEL_THRESHOLD_G      1.8f      // Config.h:154
 #define BOOST_DEBOUNCE_MS            250       // Config.h:168
 #define BOOST_BARO_CLIMB_MPS         15.0f     // Config.h:175
@@ -87,9 +99,23 @@
 // *** RE-TUNE BEFORE EVERY FLIGHT *** OpenRocket burnout->apogee + margin.
 #define APOGEE_TIMEOUT_MS            20000     // Config.h:197
 #define APOGEE_TIMEOUT_ENABLED       1         // Config.h:198
-#define MAIN_MIN_DELAY_AFTER_DROGUE_MS 1500    // Config.h:204
 #define MIN_APOGEE_ALT_M             30.0f     // Config.h:218
-#define PYRO_FIRE_PULSE_MS           1000      // Config.h:240
+// ---- Pyro sequence (SINGLE-DEPLOY). SAFETY-CRITICAL, PENDING SIGN-OFF ----
+// Shortened after deployments came too late after apogee (shock cord broke
+// twice). Reference: 1000 ms pulse (Config.h:240), 1500 ms stagger (:204).
+#define PYRO_FIRE_PULSE_MS           500       // ASSUMPTION(v5): >> e-match all-fire time; bench-verify
+#define PYRO_BACKUP_DELAY_MS         500       // CH2 starts when CH1's pulse ends (never overlapping)
+#define PYRO_RETRY_SETTLE_MS         250       // after a pulse, before reading continuity
+#define PYRO_RETRY_GAP_MS            500       // pulse end -> next attempt on the same channel
+#define PYRO_MAX_ATTEMPTS            3         // per channel incl. the first (= 2 retries)
+#define PYRO_SEQUENCE_WINDOW_MS      10000     // no new attempt after this (from apogee / reboot)
+#define RESUME_MIN_AGL_M             MIN_APOGEE_ALT_M  // after a reboot: fire only if still this high
+#if PYRO_BACKUP_DELAY_MS < PYRO_FIRE_PULSE_MS
+#error "PYRO_BACKUP_DELAY_MS must be >= PYRO_FIRE_PULSE_MS (CH1 and CH2 gates must never overlap)"
+#endif
+#if PYRO_MAX_ATTEMPTS < 1 || PYRO_MAX_ATTEMPTS > 5
+#error "PYRO_MAX_ATTEMPTS must be 1..5"
+#endif
 #define PYRO_FORCE_FLUSH_MS          4000      // Config.h:245
 #define PYRO_WINDOW_FLUSH_INTERVAL_MS 100      // Config.h:309
 #define TILT_WARN_DEG                15.0f     // Config.h:257 (diagnostic only)

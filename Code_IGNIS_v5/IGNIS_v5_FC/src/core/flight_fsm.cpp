@@ -1,5 +1,5 @@
 // =============================================================================
-// IGNIS v5: flight_fsm.cpp  SAFETY-CRITICAL
+// IGNIS v5 SINGLE-DEPLOY: flight_fsm.cpp  SAFETY-CRITICAL
 // Every threshold/interlock below is a port of the reference
 // IGNIS_FC_heavy_13/FlightState.h. Reference line numbers are cited inline.
 // Differences from the reference are marked "v5 CHANGE" and listed in
@@ -7,6 +7,7 @@
 // =============================================================================
 #include "flight_fsm.h"
 #include <math.h>
+#include "pyro_sequencer.h"
 #include "../config/config_v5.h"
 
 namespace ignis {
@@ -18,8 +19,8 @@ const char* flightStateName(FlightState s) {
     case FlightState::BOOST:          return "BOOST";
     case FlightState::COAST:          return "COAST";
     case FlightState::APOGEE:         return "APOGEE";
-    case FlightState::DROGUE_DESCENT: return "DROGUE_DESCENT";
-    case FlightState::MAIN_DESCENT:   return "MAIN_DESCENT";
+    case FlightState::DROGUE_DESCENT: return "DESCENT";
+    case FlightState::MAIN_DESCENT:   return "MAIN_DESCENT(unused)";
     case FlightState::LANDED:         return "LANDED";
     case FlightState::RECOVERY:       return "RECOVERY";
   }
@@ -37,6 +38,7 @@ FsmConfig defaultFsmConfig() {
   // Resolved once here so the modes can never disagree (reference FlightState.h:48-54).
   c.boost_debounce_ms = GROUND_TEST_MODE ? GROUND_TEST_DEBOUNCE_MS : BOOST_DEBOUNCE_MS;
   c.min_apogee_alt_m  = GROUND_TEST_MODE ? GROUND_TEST_MIN_ALT_M : MIN_APOGEE_ALT_M;
+  c.resume_min_agl_m  = GROUND_TEST_MODE ? GROUND_TEST_MIN_ALT_M : RESUME_MIN_AGL_M;
   c.boost_baro_climb_mps = BOOST_BARO_CLIMB_MPS;
   c.boost_baro_sustain_ms = BOOST_BARO_SUSTAIN_MS;
   c.baro_vel_window_ms = BARO_VELOCITY_WINDOW_MS;
@@ -46,14 +48,23 @@ FsmConfig defaultFsmConfig() {
   c.apogee_min_sample_interval_ms = APOGEE_MIN_SAMPLE_INTERVAL_MS;
   c.apogee_timeout_ms = APOGEE_TIMEOUT_MS;
   c.apogee_timeout_enabled = APOGEE_TIMEOUT_ENABLED;
-  c.main_deploy_alt_agl_m = MAIN_DEPLOY_ALT_AGL_M;
-  c.main_min_delay_after_drogue_ms = MAIN_MIN_DELAY_AFTER_DROGUE_MS;
-  c.single_event_mode = SINGLE_EVENT_MODE;
   c.landed_alt_delta_m = LANDED_ALT_DELTA_M;
   c.landed_stable_ms = LANDED_STABLE_MS;
   c.ground_cal_samples = GROUND_PRESSURE_CAL_SAMPLES;
   c.safe_return_debounce_ms = SAFE_RETURN_DEBOUNCE_MS;
   return c;
+}
+
+PyroSeqConfig defaultPyroSeqConfig() {
+  PyroSeqConfig p{};
+  p.pulse_ms = PYRO_FIRE_PULSE_MS;
+  p.backup_delay_ms = PYRO_BACKUP_DELAY_MS;
+  p.settle_ms = PYRO_RETRY_SETTLE_MS;
+  p.retry_gap_ms = PYRO_RETRY_GAP_MS;
+  p.window_ms = PYRO_SEQUENCE_WINDOW_MS;
+  p.max_attempts = PYRO_MAX_ATTEMPTS;
+  p.backup_enabled = true;
+  return p;
 }
 
 void FlightFsm::begin(const FsmConfig& cfg, bool recovery_boot) {
@@ -62,10 +73,31 @@ void FlightFsm::begin(const FsmConfig& cfg, bool recovery_boot) {
   if (cfg_.apogee_falling_samples < 2) cfg_.apogee_falling_samples = 2;
   if (cfg_.apogee_falling_samples > kMaxFalling) cfg_.apogee_falling_samples = kMaxFalling;
   recovery_boot_ = recovery_boot;
-  // v5 CHANGE (requirement A): a recovery boot is terminal. The reference
-  // instead resumed into the persisted phase (FlightState.h:148-193) and could
-  // still fire after a mid-flight reset.
   state_ = recovery_boot ? FlightState::RECOVERY : FlightState::SAFE;
+}
+
+// v5 CHANGE: resume after an unwanted reboot. Like the reference
+// (FlightState.h:148-193) every phase timer is re-armed on the new clock,
+// which can only make a failsafe later, never earlier.
+void FlightFsm::beginResume(const FsmConfig& cfg, uint8_t phase, float ground_pa) {
+  begin(cfg, false);
+  resumed_ = true;
+  need_resume_timers_ = true;
+  ground_pressure_pa_ = ground_pa;
+  ground_captured_ = ground_pa > 0;
+  if (!ground_captured_) { recovery_boot_ = true; state_ = FlightState::RECOVERY; return; }
+  if (phase == PHASE_BOOST) {
+    state_ = FlightState::BOOST;
+  } else if (phase == PHASE_COAST) {
+    state_ = FlightState::COAST;
+  } else if (phase == PHASE_DESCENT) {
+    state_ = FlightState::DROGUE_DESCENT;
+    resumed_descent_ = true;
+    deploy_commanded_ = true;   // never a second apogee command; the sequencer resumes
+  } else {
+    recovery_boot_ = true;      // LANDED / unknown: no firing of any kind
+    state_ = FlightState::RECOVERY;
+  }
 }
 
 void FlightFsm::setState(FlightState s, FsmOutput& out) {
@@ -80,7 +112,7 @@ void FlightFsm::captureGround(const FsmInput& in) {
   if (!in.baro_valid) return;
   ground_sum_ += in.pressure_pa;
   if (ground_n_ < 0xFFFF) ground_n_++;
-  else { ground_sum_ = ground_pressure_pa_ * ground_n_; }  // saturate: keep the mean stable
+  else { ground_sum_ = (double)ground_pressure_pa_ * ground_n_; }  // saturate: keep the mean stable
   if (ground_n_ >= cfg_.ground_cal_samples) {
     ground_pressure_pa_ = (float)(ground_sum_ / ground_n_);
     ground_captured_ = true;
@@ -119,29 +151,34 @@ bool FlightFsm::isMonotonicFalling() const {
   return true;
 }
 
-// reference FlightState.h:130-139. Requests the drogue and advances to
-// DROGUE_DESCENT in the same tick.
-void FlightFsm::enterApogee(uint32_t now, uint8_t trigger, FsmOutput& out) {
-  // Defensive re-check of every precondition (caller already checked).
-  if (recovery_boot_ || state_ != FlightState::COAST) return;
+// reference FlightState.h:130-139. Commands deployment and advances to
+// DESCENT in the same tick.
+void FlightFsm::enterApogee(uint32_t, uint8_t trigger, FsmOutput& out) {
+  if (recovery_boot_ || state_ != FlightState::COAST) return;   // defensive re-check
   if (max_agl_ < cfg_.min_apogee_alt_m) return;
   deploy_trigger_ = trigger;
-  if (!drogue_requested_) {
-    drogue_requested_ = true;
-    out.fire_drogue = true;
+  if (!deploy_commanded_) {
+    deploy_commanded_ = true;
+    out.deploy_command = true;
   }
-  drogue_fired_ms_ = now;
+  out.persist_phase = PHASE_DESCENT;
   setState(FlightState::DROGUE_DESCENT, out);
 }
 
 FsmOutput FlightFsm::step(const FsmInput& in) {
   FsmOutput out;
 
-  // RECOVERY: terminal, no outputs of any kind (requirement A).
+  // RECOVERY: terminal, no outputs of any kind.
   if (recovery_boot_ || state_ == FlightState::RECOVERY) {
     state_ = FlightState::RECOVERY;
     if (in.baro_valid) last_baro_alt_m_ = in.baro_alt_m;
     return out;
+  }
+  if (need_resume_timers_) {
+    need_resume_timers_ = false;
+    boost_entered_ms_ = in.now_ms;
+    coast_entered_ms_ = in.now_ms;
+    alt_count_ = 0;
   }
 
   // reference FlightState.h:212-222
@@ -177,27 +214,34 @@ FsmOutput FlightFsm::step(const FsmInput& in) {
 
       // Liftoff detection runs in BOTH pad states, so a bad continuity read
       // can never cancel a flight (reference philosophy, Pyro.h:11-16).
-      // Path A: accelerometer (reference :233-240)
-      bool accelTrigger = false;
+      bool accelTrigger = false;  // Path A (reference :233-240)
       if (in.imu_valid && in.accel_total_g >= cfg_.boost_accel_g) {
         if (!boost_above_) { boost_above_ = true; boost_above_since_ms_ = in.now_ms; }
         if (in.now_ms - boost_above_since_ms_ >= cfg_.boost_debounce_ms) accelTrigger = true;
       } else {
         boost_above_ = false;
       }
-      // Path B: barometric climb rate (reference :242-249)
-      bool baroTrigger = false;
+      bool baroTrigger = false;   // Path B (reference :242-249)
       if (ground_captured_ && baro_vel_mps_ >= cfg_.boost_baro_climb_mps) {
         if (!baro_climb_) { baro_climb_ = true; baro_climb_since_ms_ = in.now_ms; }
         if (in.now_ms - baro_climb_since_ms_ >= cfg_.boost_baro_sustain_ms) baroTrigger = true;
       } else {
         baro_climb_ = false;
       }
-      if (accelTrigger || baroTrigger) {
+      if ((accelTrigger || baroTrigger) && ground_captured_) {
         setState(FlightState::BOOST, out);
-        out.entered_boost = true;
+        out.persist_phase = PHASE_BOOST;
         boost_entered_ms_ = in.now_ms;
         if (agl_m_ > max_agl_) max_agl_ = agl_m_;
+      } else if (accelTrigger || baroTrigger) {
+        // v5 CHANGE: no ground reference yet (< GROUND_PRESSURE_CAL_SAMPLES valid
+        // baro samples since boot). Enter BOOST anyway for logging; AGL and the
+        // altitude gate then use the first in-flight sample (conservative: the
+        // gate can only become harder to pass).
+        if (in.baro_valid) { ground_pressure_pa_ = in.pressure_pa; ground_captured_ = true; }
+        setState(FlightState::BOOST, out);
+        out.persist_phase = PHASE_BOOST;
+        boost_entered_ms_ = in.now_ms;
       }
       break;
     }
@@ -206,6 +250,7 @@ FsmOutput FlightFsm::step(const FsmInput& in) {
       if (in.accel_total_g <= cfg_.burnout_accel_g ||
           (in.now_ms - boost_entered_ms_ >= cfg_.burnout_timeout_ms)) {
         setState(FlightState::COAST, out);
+        out.persist_phase = PHASE_COAST;
         coast_entered_ms_ = in.now_ms;
         alt_count_ = 0;  // reset apogee window at burnout
       }
@@ -234,30 +279,20 @@ FsmOutput FlightFsm::step(const FsmInput& in) {
     }
 
     case FlightState::APOGEE:
-      // Never persists (enterApogee advances in the same tick). If reached,
-      // treat as COAST rather than assume anything fired.
-      setState(FlightState::COAST, out);
+      setState(FlightState::COAST, out);  // never persists; treat as COAST
       break;
 
-    case FlightState::DROGUE_DESCENT:  // reference :307-326
-      if (cfg_.single_event_mode) {
-        setState(FlightState::MAIN_DESCENT, out);  // CH2 never requested
-      } else if (drogue_requested_ &&
-                 agl_m_ <= cfg_.main_deploy_alt_agl_m &&
-                 (in.now_ms - drogue_fired_ms_ >= cfg_.main_min_delay_after_drogue_ms)) {
-        if (!main_requested_) {
-          main_requested_ = true;
-          out.fire_main = true;
-        }
-        setState(FlightState::MAIN_DESCENT, out);
-      }
+    case FlightState::MAIN_DESCENT:       // not used in SINGLE-DEPLOY
+      setState(FlightState::DROGUE_DESCENT, out);
       break;
 
-    case FlightState::MAIN_DESCENT:  // reference :328-339
+    case FlightState::DROGUE_DESCENT:     // descent under the parachute
+      // Landed detection (reference :328-339, moved here: single deployment)
       if (fabsf(last_baro_alt_m_ - last_landed_alt_) < cfg_.landed_alt_delta_m) {
         if (!landed_timing_) { landed_timing_ = true; landed_since_ms_ = in.now_ms; }
         if (in.now_ms - landed_since_ms_ >= cfg_.landed_stable_ms) {
           setState(FlightState::LANDED, out);
+          out.persist_phase = PHASE_LANDED;
         }
       } else {
         landed_timing_ = false;
@@ -266,16 +301,18 @@ FsmOutput FlightFsm::step(const FsmInput& in) {
       break;
 
     case FlightState::LANDED:   // terminal: keep logging/telemetry alive
-    case FlightState::RECOVERY: // handled above
+    case FlightState::RECOVERY:
       break;
   }
 
-  // Belt and braces: requests can only leave this function from the two
-  // post-apogee code paths above. Re-assert the structural invariants.
-  if (out.fire_main && (!drogue_requested_ || cfg_.single_event_mode)) out.fire_main = false;
-  if ((out.fire_drogue || out.fire_main) && max_agl_ < cfg_.min_apogee_alt_m) {
-    out.fire_drogue = false;
-    out.fire_main = false;
+  // Pyro activity is permitted only in DESCENT, only after a deployment
+  // command, and after a reboot only while provably airborne.
+  if (state_ == FlightState::DROGUE_DESCENT && deploy_commanded_) {
+    if (resumed_descent_) {
+      out.fire_permitted = in.baro_valid && ground_captured_ && agl_m_ >= cfg_.resume_min_agl_m;
+    } else {
+      out.fire_permitted = max_agl_ >= cfg_.min_apogee_alt_m;
+    }
   }
   return out;
 }

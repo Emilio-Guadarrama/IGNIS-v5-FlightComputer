@@ -8,7 +8,9 @@
 #pragma once
 
 #define IGNIS_FW_NAME     "IGNIS-v5-FC"
-#define IGNIS_FW_VERSION  "0.1.0-prelim"
+#define IGNIS_FW_VERSION  "0.2.0-prelim"
+// This variant: one parachute event, CH2 = backup charge, retry if the e-match stays intact.
+#define IGNIS_FW_VARIANT  "SINGLE-DEPLOY"
 
 #if defined(__has_include)
 #if __has_include("build_info.h")

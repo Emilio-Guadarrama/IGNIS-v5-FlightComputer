@@ -1,20 +1,22 @@
 // =============================================================================
-// IGNIS v5: flight_fsm.h  (pure C++, host-testable)  SAFETY-CRITICAL
+// IGNIS v5 SINGLE-DEPLOY: flight_fsm.h  (pure C++, host-testable)  SAFETY-CRITICAL
 //
-// Flight state machine. Ported from the reference
+// Flight state machine, ported from the reference
 // IGNIS_FC_heavy_13/FlightState.h (lines cited in flight_fsm.cpp).
 //
-// The FSM never touches hardware. It returns fire REQUESTS in FsmOutput;
-// main hands them to pyro_hw, which applies its own one-shot latch and
-// RECOVERY lockout. Interlocks enforced here:
-//   - No fire request before apogee is detected (barometric falling window or
-//     APOGEE_TIMEOUT failsafe), and only after BOOST -> COAST.
+// The FSM never touches hardware. It emits ONE deployment command at apogee
+// and a per-tick "fire_permitted" flag; core/pyro_sequencer.h decides which
+// channel fires when (primary, backup, retries). Interlocks enforced here:
+//   - No deployment before apogee (barometric falling window or APOGEE_TIMEOUT
+//     failsafe), and only after BOOST -> COAST.
 //   - MIN_APOGEE_ALT_M gate (peak AGL since liftoff) on BOTH apogee paths.
-//   - Drogue -> main stagger MAIN_MIN_DELAY_AFTER_DROGUE_MS.
-//   - SINGLE_EVENT_MODE: main is never requested.
-//   - RECOVERY is terminal and produces no requests.
-//   - Continuity is NOT a firing gate (reference Pyro.h:11-16). It only selects
-//     SAFE vs ARMED on the pad.
+//   - After a reboot in descent: fire_permitted only while airborne
+//     (valid baro, AGL >= resume_min_agl_m vs the persisted ground pressure).
+//   - LANDED and RECOVERY never permit firing.
+//   - Continuity is NOT a deployment gate (reference Pyro.h:11-16). It selects
+//     SAFE vs ARMED on the pad; the sequencer uses it only to decide retries.
+// Single deployment: state 6 (MAIN_DESCENT) is never entered in this variant;
+// DROGUE_DESCENT (5) is "descent under the parachute" until LANDED.
 // =============================================================================
 #pragma once
 #include <stdint.h>
@@ -35,9 +37,7 @@ struct FsmConfig {
   uint32_t apogee_timeout_ms;
   bool     apogee_timeout_enabled;
   float    min_apogee_alt_m;
-  float    main_deploy_alt_agl_m;
-  uint32_t main_min_delay_after_drogue_ms;
-  bool     single_event_mode;
+  float    resume_min_agl_m;
   float    landed_alt_delta_m;
   uint32_t landed_stable_ms;
   uint16_t ground_cal_samples;
@@ -46,6 +46,11 @@ struct FsmConfig {
 
 // Built from config_v5.h (GROUND_TEST_MODE resolved here, once).
 FsmConfig defaultFsmConfig();
+
+// Persisted flight phase (NVS/RTC), see boot_policy.h.
+enum PersistPhase : uint8_t {
+  PHASE_NONE = 0, PHASE_BOOST = 1, PHASE_COAST = 2, PHASE_DESCENT = 3, PHASE_LANDED = 4,
+};
 
 struct FsmInput {
   uint32_t now_ms = 0;
@@ -58,15 +63,18 @@ struct FsmInput {
 };
 
 struct FsmOutput {
-  bool fire_drogue = false;     // request: drive CH1
-  bool fire_main = false;       // request: drive CH2
+  bool deploy_command = false;  // apogee detected: start the pyro sequence (once)
+  bool fire_permitted = false;  // this tick, the sequencer may start an attempt
   bool state_changed = false;
-  bool entered_boost = false;   // main persists flight_in_progress to NVS on this
+  uint8_t persist_phase = PHASE_NONE;  // != NONE: main persists this phase now
 };
 
 class FlightFsm {
  public:
   void begin(const FsmConfig& cfg, bool recovery_boot);
+  // Resume after an unwanted reboot (reference FlightState.h:148-193).
+  // phase: PHASE_BOOST / PHASE_COAST / PHASE_DESCENT; ground_pa: persisted.
+  void beginResume(const FsmConfig& cfg, uint8_t phase, float ground_pa);
   FsmOutput step(const FsmInput& in);
 
   FlightState state() const { return state_; }
@@ -76,9 +84,9 @@ class FlightFsm {
   bool groundCaptured() const { return ground_captured_; }
   float groundPressure() const { return ground_pressure_pa_; }
   uint8_t deployTrigger() const { return deploy_trigger_; }
-  bool drogueRequested() const { return drogue_requested_; }
-  bool mainRequested() const { return main_requested_; }
-  bool recoveryBoot() const { return recovery_boot_; }
+  bool deployCommanded() const { return deploy_commanded_; }
+  bool resumed() const { return resumed_; }
+  bool resumedDescent() const { return resumed_descent_; }
 
  private:
   static constexpr int kMaxFalling = 8;
@@ -92,6 +100,9 @@ class FlightFsm {
   FsmConfig cfg_{};
   FlightState state_ = FlightState::SAFE;
   bool recovery_boot_ = false;
+  bool resumed_ = false;
+  bool resumed_descent_ = false;
+  bool need_resume_timers_ = false;
 
   double ground_sum_ = 0;
   uint16_t ground_n_ = 0;
@@ -113,7 +124,6 @@ class FlightFsm {
 
   uint32_t boost_entered_ms_ = 0;
   uint32_t coast_entered_ms_ = 0;
-  uint32_t drogue_fired_ms_ = 0;
 
   float baro_vel_base_alt_ = 0;
   uint32_t baro_vel_base_ms_ = 0;
@@ -122,8 +132,7 @@ class FlightFsm {
 
   float max_agl_ = 0;
   uint8_t deploy_trigger_ = DEPLOY_NONE;
-  bool drogue_requested_ = false;
-  bool main_requested_ = false;
+  bool deploy_commanded_ = false;
 };
 
 // Barometric altitude from a pressure ratio (reference Sensors.h:251-253).
