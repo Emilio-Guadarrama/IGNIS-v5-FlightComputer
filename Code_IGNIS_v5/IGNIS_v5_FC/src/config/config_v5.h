@@ -143,9 +143,14 @@
 #define LORA_QUEUE_DEPTH             2
 
 // FreeRTOS priorities / cores. Flight path on core 1, WiFi on core 0.
-#define TASK_PRIO_FLIGHT             10
-#define TASK_PRIO_LORA               6
-#define TASK_PRIO_SD                 5
+// Verified in the Arduino-ESP32 3.3.12 prebuilt sdkconfig: WiFi task, lwIP
+// tcpip (prio 18) and esp_timer are pinned to core 0, but the Arduino
+// "arduino_events" task runs on core 1 at ESP_TASKD_EVENT_PRIO-1 = 19.
+// The flight path therefore sits ABOVE 19 so no network activity can
+// preempt it. IPC tasks (24) stay above everything.
+#define TASK_PRIO_FLIGHT             22
+#define TASK_PRIO_LORA               21
+#define TASK_PRIO_SD                 20
 #define TASK_PRIO_WIFI               1
 #define TASK_CORE_FLIGHT             1
 #define TASK_CORE_SD                 1
