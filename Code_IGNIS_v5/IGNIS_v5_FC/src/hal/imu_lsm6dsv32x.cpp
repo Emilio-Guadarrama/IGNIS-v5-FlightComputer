@@ -4,25 +4,28 @@
 #include "i2c_bus.h"
 #include "../config/pins_v5.h"
 
-// TODO(v5-verify): register addresses and field encodings below follow the
-// ST LSM6DSV32X register map (WHO_AM_I 0x0F = 0x70, CTRL1..CTRL8, OUT_TEMP_L
-// 0x20, OUTX_L_G 0x22, OUTX_L_A 0x28). The repo datasheet PDF could not be
-// text-extracted on this machine: verify against "Datasheet - LSM6DSV32XTR.pdf"
-// before flight. A wrong WHO_AM_I makes imuBegin() fail safe (IMU invalid,
-// barometric liftoff backup still active).
+// VERIFIED against "Datasheet - LSM6DSV32XTR.pdf" (DS13511 Rev 2) in the repo:
+// register map p.52-53 (WHO_AM_I 0Fh = 70h, CTRL1 10h, CTRL2 11h, CTRL3 12h
+// default 44h, CTRL6 15h, CTRL8 17h default 04h, OUT_TEMP_L 20h, OUTX_L_G 22h,
+// OUTX_L_A 28h), Tables 50-57, 62-63, 67-68 (fields/ODR/FS codes), sensitivity
+// table (0.976 mg/LSB @32 g, 70 mdps/LSB @2000 dps, 256 LSB/C, 0 LSB = 25 C),
+// Table 12 (I2C SAD 110101x -> 0x6A/0x6B).
 namespace {
 constexpr uint8_t REG_WHO_AM_I = 0x0F;
 constexpr uint8_t WHO_AM_I_VAL = 0x70;
-constexpr uint8_t REG_CTRL1 = 0x10;   // OP_MODE_XL[6:4] ODR_XL[3:0]
-constexpr uint8_t REG_CTRL2 = 0x11;   // OP_MODE_G[6:4]  ODR_G[3:0]
+constexpr uint8_t REG_CTRL1 = 0x10;   // 0 | OP_MODE_XL[6:4] | ODR_XL[3:0]   (bit7 must be 0)
+constexpr uint8_t REG_CTRL2 = 0x11;   // 0 | OP_MODE_G[6:4]  | ODR_G[3:0]    (bit7 must be 0)
 constexpr uint8_t REG_CTRL3 = 0x12;   // BOOT(7) BDU(6) IF_INC(2) SW_RESET(0)
-constexpr uint8_t REG_CTRL6 = 0x15;   // LPF1_G_BW[6:4] FS_G[3:0]
-constexpr uint8_t REG_CTRL8 = 0x17;   // HP_LPF2_XL_BW[7:5] FS_XL[1:0]
+constexpr uint8_t REG_CTRL6 = 0x15;   // 0 | LPF1_G_BW[6:4] | FS_G[3:0]
+constexpr uint8_t REG_CTRL8 = 0x17;   // HP_LPF2_XL_BW[7:5] | 0 | XL_DualC_EN(3) | 1(2) | FS_XL[1:0]
 constexpr uint8_t REG_OUT_TEMP_L = 0x20;  // burst: temp(2) gyro(6) accel(6) = 14 bytes
 
-constexpr uint8_t ODR_480HZ_HP = 0x08;    // high-performance mode, 480 Hz
+constexpr uint8_t ODR_480HZ_HP = 0x08;    // OP_MODE 000 high-performance, ODR 1000 = 480 Hz
 // ASSUMPTION(v5): +/-32 g (part maximum, rocket boost) and +/-2000 dps
 // (better resolution than 4000 dps; tilt is diagnostic only).
+// CTRL8 bit 2 "must be set to 1 for the correct operation of the device"
+// (Table 67 note 2). Fixed after the datasheet check: was written as 0x03.
+constexpr uint8_t CTRL8_REQUIRED_BIT2 = 0x04;
 constexpr uint8_t FS_XL_32G = 0x03;
 constexpr uint8_t FS_G_2000DPS = 0x04;
 constexpr float ACCEL_G_PER_LSB = 0.000976f;   // 0.976 mg/LSB @ +/-32 g
@@ -55,13 +58,13 @@ bool imuBegin() {
   i2cWrite8(s_addr, REG_CTRL3, 0x01);  // SW_RESET
   delay(5);
   bool ok = i2cWrite8(s_addr, REG_CTRL3, 0x44) &&          // BDU + IF_INC
-            i2cWrite8(s_addr, REG_CTRL8, FS_XL_32G) &&
+            i2cWrite8(s_addr, REG_CTRL8, CTRL8_REQUIRED_BIT2 | FS_XL_32G) &&
             i2cWrite8(s_addr, REG_CTRL6, FS_G_2000DPS) &&
             i2cWrite8(s_addr, REG_CTRL1, ODR_480HZ_HP) &&
             i2cWrite8(s_addr, REG_CTRL2, ODR_480HZ_HP);
   if (!ok) { Serial.println("[IMU] configuration write failed"); return false; }
   uint8_t rb = 0;
-  if (!i2cRead(s_addr, REG_CTRL8, &rb, 1) || (rb & 0x03) != FS_XL_32G) {
+  if (!i2cRead(s_addr, REG_CTRL8, &rb, 1) || (rb & 0x07) != (CTRL8_REQUIRED_BIT2 | FS_XL_32G)) {
     Serial.println("[IMU] CTRL8 read-back mismatch");
     return false;
   }

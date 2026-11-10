@@ -6,9 +6,13 @@
 #include "../core/dps368_math.h"
 #include "../core/flight_fsm.h"
 
-// TODO(v5-verify): DPS3xx register map (PRS_B2 0x00, TMP_B2 0x03, PRS_CFG 0x06,
-// TMP_CFG 0x07, MEAS_CFG 0x08, CFG_REG 0x09, RESET 0x0C, ID 0x0D, COEF 0x10,
-// COEF_SRCE 0x28). Verify against infineon-dps368-datasheet-en.pdf.
+// VERIFIED against the repo's infineon-dps368-datasheet-en.pdf (v1.1,
+// 2019-07-03): register map Table 15 p.26 (PRS_B2 0x00, TMP_B2 0x03, PRS_CFG
+// 0x06, TMP_CFG 0x07, MEAS_CFG 0x08, CFG_REG 0x09, RESET 0x0C, ID 0x0D = 0x10,
+// COEF 0x10-0x21, COEF_SRCE 0x28 bit7); PM_RATE 101 = 32/s, PM_PRC 0011 = 8x
+// (p.30, no shift needed <= 8x); TMP_RATE 010 = 4/s, TMP_PRC 0000 (p.32);
+// MEAS_CTRL 111 = continuous P+T, COEF_RDY bit7 / SENSOR_RDY bit6 (p.33);
+// SOFT_RST 1001 (p.37).
 namespace {
 constexpr uint8_t REG_PSR_B2 = 0x00;
 constexpr uint8_t REG_PRS_CFG = 0x06;
