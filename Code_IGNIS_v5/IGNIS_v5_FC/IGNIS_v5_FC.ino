@@ -1,6 +1,6 @@
 /*
   ============================================================================
-  IGNIS v5 Flight Computer: preliminary firmware (0.1.0-prelim)
+  IGNIS v5 Flight Computer, SINGLE-DEPLOY variant: preliminary firmware (0.2.0-prelim)
   Ignitia Rocket Lab. ESP32-S3-WROOM-1-N16R8, Arduino-ESP32 3.3.12.
 
   HANDLE A POWERED BOARD AS LIVE PYRO. Arming is hardware (pyro opto +
@@ -9,8 +9,9 @@
 
   Boot sequence:
     1. Pyro gates driven LOW (before anything else).
-    2. reset_reason + NVS/RTC flags -> NORMAL or RECOVERY (core/boot_policy).
-       Flags clear only on ESP_RST_POWERON (RBF power cycle).
+    2. reset_reason + persisted flight state -> NORMAL / RESUME_ASCENT /
+       RESUME_DESCENT / RECOVERY (core/boot_policy). State clears only on
+       ESP_RST_POWERON (RBF power cycle).
     3. Identity: version, git hash, SHA-256 of the running app partition.
     4. Sensors, SPI bus, SD task, LoRa task, status IO.
     5. Flight task (core 1). In RECOVERY the pyro layer is locked out first.
@@ -66,46 +67,51 @@ void setup() {
   Serial.begin(115200);
   delay(50);
 
-  // ---- Requirement A: reset reason + persisted flags ----
+  // ---- Reboot handling: reset reason + persisted flight state ----
   uint8_t rr = (uint8_t)esp_reset_reason();
   bool power_on = (rr == RESET_REASON_POWERON_VALUE);
   NvsBootRead nv = nvsBootRead(power_on);
-  PersistFlags rtc;
+  PersistedFlight rtc;
   bool rtc_valid = false;
   rtcMirrorRead(rtc, rtc_valid);
-  BootDecision bd = decideBoot(rr, nv.flags, nv.ok, rtc, rtc_valid);
-  uint8_t fired_mask = nv.ok ? nv.fired_mask : 0;
-  if (bd.clear_flags) { nvsClearFlags(); fired_mask = 0; }
-  if (power_on) rtcMirrorClear();
+  BootDecision bd = decideBoot(rr, nv.pf, nv.ok, rtc, rtc_valid);
+  if (bd.clear_state) persistClear();
+  bool normal = (bd.mode == BootMode::NORMAL);
   bool recovery = (bd.mode == BootMode::RECOVERY);
 
   g_boot.reset_reason = rr;
   g_boot.boot_count = nv.boot_count;
   g_boot.boot_why = bd.why;
   g_recovery_boot = recovery;
-  if (recovery) {
-    g_flight_latched = true;   // WiFi/OTA never start on a recovery boot
-    g_post_fire = nv.flags.post_fire || rtc.post_fire;
+  if (!normal) {
+    g_flight_latched = true;   // WiFi/OTA never start after an in-flight reboot
+    g_post_fire = bd.merged.attempts[0] || bd.merged.attempts[1];
   }
 
   computeAppSha256();
 
   Serial.println();
   Serial.println("================================================================");
-  Serial.printf("%s %s  git %s\n", IGNIS_FW_NAME, IGNIS_FW_VERSION, IGNIS_GIT_HASH);
+  Serial.printf("%s %s %s  git %s\n", IGNIS_FW_NAME, IGNIS_FW_VARIANT, IGNIS_FW_VERSION, IGNIS_GIT_HASH);
   Serial.printf("app sha256 %s  (image %s)\n", g_boot.app_sha256, otaImageStateName());
   Serial.printf("boot_count %u  reset_reason %u %s  nvs %s\n", nv.boot_count, rr, resetReasonName(rr),
                 nv.ok ? "ok" : "UNREADABLE");
-  Serial.printf("boot mode: %s (%s)\n", recovery ? "RECOVERY" : "NORMAL", bd.why);
-  Serial.printf("build: FLIGHT=%d GROUND_TEST_MODE=%d SINGLE_EVENT_MODE=%d WIFI=%d OTA=%d\n",
-                IGNIS_FLIGHT_BUILD, GROUND_TEST_MODE, SINGLE_EVENT_MODE, IGNIS_ENABLE_WIFI, IGNIS_ENABLE_OTA);
+  Serial.printf("boot mode: %s (%s)  phase %u  attempts %u/%u\n", bootModeName(bd.mode), bd.why,
+                bd.merged.phase, bd.merged.attempts[0], bd.merged.attempts[1]);
+  Serial.printf("build: %s FLIGHT=%d GROUND_TEST_MODE=%d WIFI=%d OTA=%d  pyro: pulse %d ms, backup +%d ms, max %d attempts/ch\n",
+                IGNIS_FW_VARIANT, IGNIS_FLIGHT_BUILD, GROUND_TEST_MODE, IGNIS_ENABLE_WIFI, IGNIS_ENABLE_OTA,
+                PYRO_FIRE_PULSE_MS, PYRO_BACKUP_DELAY_MS, PYRO_MAX_ATTEMPTS);
   Serial.println("!!! Powered board = LIVE PYRO. RBF power cut is the only disable. !!!");
   if (recovery) {
     Serial.println("################################################################");
-    Serial.println("###  RECOVERY: reset after flight start / pyro fire.          ###");
+    Serial.println("###  RECOVERY: reset after landing / without flight record.   ###");
     Serial.println("###  Logging + LoRa only. Pyro LOCKED OUT. WiFi/OTA off.      ###");
     Serial.println("###  Power-cycle (RBF) to return to normal operation.         ###");
     Serial.println("################################################################");
+  }
+  if (bd.mode == BootMode::RESUME_ASCENT || bd.mode == BootMode::RESUME_DESCENT) {
+    Serial.println("###  RESUMED after an in-flight reset (WiFi/OTA off). Deploy only post-apogee;");
+    Serial.println("###  after a reset in descent: retry/backup only if airborne + e-match intact.");
   }
 #if GROUND_TEST_MODE
   Serial.println("###  GROUND_TEST_MODE ON: NOT FLIGHT CONFIG  ###");
@@ -116,7 +122,7 @@ void setup() {
   i2cBusBegin();
   bool imu = imuBegin();
   bool baro = baroBegin();
-  if (imu && !recovery) imuCalibrateGyroBias();   // never calibrate a moving body
+  if (imu && normal) imuCalibrateGyroBias();   // never calibrate a possibly moving body
   gpsBegin();
   batteryBegin();
   Serial.printf("[BOOT] IMU %s  BARO %s  VBAT %.2f V\n", imu ? "OK" : "FAIL", baro ? "OK" : "FAIL", batteryReadV());
@@ -124,18 +130,18 @@ void setup() {
   // ---- Shared SPI bus, SD + LoRa tasks ----
   spiBusBegin();
   char banner[200];
-  snprintf(banner, sizeof(banner), "%s %s git=%s sha256=%s boot=%u reset=%u(%s) mode=%s",
-           IGNIS_FW_NAME, IGNIS_FW_VERSION, IGNIS_GIT_HASH, g_boot.app_sha256, nv.boot_count, rr,
-           resetReasonName(rr), recovery ? "RECOVERY" : "NORMAL");
+  snprintf(banner, sizeof(banner), "%s %s %s git=%s sha256=%s boot=%u reset=%u(%s) mode=%s",
+           IGNIS_FW_NAME, IGNIS_FW_VARIANT, IGNIS_FW_VERSION, IGNIS_GIT_HASH, g_boot.app_sha256,
+           nv.boot_count, rr, resetReasonName(rr), bootModeName(bd.mode));
   sdLoggerStart(banner);
   loraStart();
   statusBegin();
 
   // ---- Flight task (core 1) ----
-  flightTaskStart(recovery, fired_mask);
+  flightTaskStart(bd);
 
-  // ---- WiFi dashboard (core 0), never on a recovery boot ----
-  if (!recovery) wifiDashboardStart();
+  // ---- WiFi dashboard (core 0), only on a normal (pad) boot ----
+  if (normal) wifiDashboardStart();
 
   Serial.println("[BOOT] complete");
 }

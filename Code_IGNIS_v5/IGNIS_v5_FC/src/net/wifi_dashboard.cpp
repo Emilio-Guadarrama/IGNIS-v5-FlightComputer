@@ -38,10 +38,11 @@ async function tick(){try{const r=await fetch('/api/state');const s=await r.json
 h+=row('state',s.state,s.state=='RECOVERY'?'bad':'');h+=row('t_ms',s.t);
 h+=row('reset_reason',s.reset_reason+' '+s.reset_name);h+=row('boot_count',s.boot_count);
 h+=row('fw',s.fw.version+' git '+s.fw.git);h+=row('app sha256',s.fw.sha256);
-h+=row('build','ground_test='+s.build.ground_test+' single_event='+s.build.single_event,s.build.ground_test?'bad':'');
+h+=row('build',s.build.variant+' ground_test='+s.build.ground_test,s.build.ground_test?'bad':'');
+h+=row('boot mode',s.boot_mode,s.boot_mode=='NORMAL'?'':'bad');
 h+=row('battery V',s.vbat.toFixed(2),s.vbat<7.8?'bad':(s.vbat<8.0?'warn':'ok'));
 h+=row('continuity','CH1 '+(s.cont.ch1?'YES':'no')+' / CH2 '+(s.cont.ch2?'YES':'no')+(s.cont.valid?'':' (INVALID)'),s.cont.valid?'':'bad');
-h+=row('fired','CH1 '+s.fired[0]+' / CH2 '+s.fired[1]);
+h+=row('pyro attempts','CH1 primary '+s.attempts[0]+' / CH2 backup '+s.attempts[1]);
 h+=row('baro',s.baro.p.toFixed(1)+' Pa  alt '+s.baro.alt.toFixed(1)+' m  AGL '+s.agl.toFixed(1)+' m  '+s.baro.t.toFixed(1)+' C',s.baro.ok?'':'bad');
 h+=row('imu','a '+s.imu.a.map(x=>x.toFixed(2)).join(' ')+' |'+s.imu.at.toFixed(2)+'| g  w '+s.imu.g.map(x=>x.toFixed(1)).join(' ')+' dps',s.imu.ok?'':'bad');
 h+=row('gps',(s.gps.fix?'FIX':'no fix')+' sats '+s.gps.sats+' '+s.gps.lat.toFixed(6)+','+s.gps.lon.toFixed(6)+' alt '+s.gps.alt.toFixed(1),s.gps.fix?'ok':'warn');
@@ -78,24 +79,25 @@ static void handleState() {
     "{\"state\":\"%s\",\"t\":%lu,\"agl\":%.2f,\"max_agl\":%.2f,"
     "\"baro\":{\"ok\":%d,\"p\":%.1f,\"alt\":%.2f,\"t\":%.2f},"
     "\"imu\":{\"ok\":%d,\"a\":[%.3f,%.3f,%.3f],\"at\":%.3f,\"g\":[%.2f,%.2f,%.2f],\"t\":%.1f},"
-    "\"vbat\":%.3f,\"cont\":{\"ch1\":%d,\"ch2\":%d,\"valid\":%d},\"fired\":[%d,%d],"
+    "\"vbat\":%.3f,\"cont\":{\"ch1\":%d,\"ch2\":%d,\"valid\":%d},\"attempts\":[%u,%u],"
     "\"gps\":{\"fix\":%d,\"sats\":%u,\"lat\":%.7f,\"lon\":%.7f,\"alt\":%.1f},"
     "\"lora\":{\"ok\":%d,\"tx\":%lu,\"last\":%d,\"skip\":%lu},"
     "\"sd\":{\"status\":\"%s\",\"file\":\"%s\",\"dropped\":%lu},"
-    "\"reset_reason\":%u,\"reset_name\":\"%s\",\"boot_count\":%u,\"recovery\":%d,"
+    "\"reset_reason\":%u,\"reset_name\":\"%s\",\"boot_count\":%u,\"boot_mode\":\"%s\","
     "\"fw\":{\"name\":\"%s\",\"version\":\"%s\",\"git\":\"%s\",\"sha256\":\"%s\"},"
-    "\"build\":{\"ground_test\":%d,\"single_event\":%d},\"ota_deny\":%lu}",
+    "\"build\":{\"variant\":\"%s\",\"ground_test\":%d},\"ota_deny\":%lu}",
     flightStateName(s.state), (unsigned long)s.timestamp_ms, s.agl_m, s.max_agl_m,
     s.baro_valid, s.pressure_pa, s.baro_alt_m, s.baro_temp_c,
     s.imu_valid, s.accel_x_g, s.accel_y_g, s.accel_z_g, s.accel_total_g,
     s.gyro_x_dps, s.gyro_y_dps, s.gyro_z_dps, s.imu_temp_c,
-    s.battery_v, s.cont.ch1, s.cont.ch2, s.cont.valid, s.pyro1_fired, s.pyro2_fired,
+    s.battery_v, s.cont.ch1, s.cont.ch2, s.cont.valid, (unsigned)s.pyro_attempts[0], (unsigned)s.pyro_attempts[1],
     s.gps_fix, (unsigned)s.gps_sats, s.gps_lat, s.gps_lon, s.gps_alt_m,
     s.lora_ok, (unsigned long)s.lora_tx_count, s.lora_last_tx_ok, (unsigned long)s.lora_skipped,
     sdName(s.sd), sdCurrentFile(), (unsigned long)s.sd_rows_dropped,
-    (unsigned)s.reset_reason, resetReasonName(s.reset_reason), (unsigned)s.boot_count, s.recovery_boot,
+    (unsigned)s.reset_reason, resetReasonName(s.reset_reason), (unsigned)s.boot_count,
+    bootModeName((BootMode)s.boot_mode),
     IGNIS_FW_NAME, IGNIS_FW_VERSION, IGNIS_GIT_HASH, g_boot.app_sha256,
-    (int)GROUND_TEST_MODE, (int)SINGLE_EVENT_MODE, (unsigned long)denyMask());
+    IGNIS_FW_VARIANT, (int)GROUND_TEST_MODE, (unsigned long)denyMask());
   s_server->send(200, "application/json", s_json);
 }
 
