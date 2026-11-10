@@ -4,9 +4,9 @@
 // Register layout and formula: Infineon DPS368 datasheet, sections
 // "Calibration Coefficients" (COEF 0x10-0x21) and "How to Calculate
 // Compensated Pressure and Temperature Values".
-// TODO(v5-verify): register addresses/bit fields were written from the
-// published DPS3xx register map; the repo PDF could not be text-extracted on
-// this machine. Verify against infineon-dps368-datasheet-en.pdf.
+// VERIFIED against the repo's infineon-dps368-datasheet-en.pdf (v1.1):
+// coefficient packing Table 18 p.38, scale factors Table 9 p.16, pressure and
+// temperature formulas section 4.9.1/4.9.2 p.15-16.
 // =============================================================================
 #pragma once
 #include <stdint.h>

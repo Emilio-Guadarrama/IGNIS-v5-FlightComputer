@@ -8,9 +8,18 @@
 #include "../config/pins_v5.h"
 #include "../core/telemetry_packet.h"
 
-// SX1276 LoRa-mode registers (Semtech SX1276 datasheet, section 6.4).
-// TODO(v5-verify): values checked from memory of the SX1276 register map,
-// cross-check against RFM95W-915MHz-Transceptor-Lora-Datasheet.pdf in the repo.
+// SX1276 LoRa-mode registers. VERIFIED against the repo's
+// "RFM95W-915MHz-Transceptor-Lora-Datasheet.pdf" (HopeRF, LoRa register table
+// p.~104-107 and common registers p.~87-88): RegOpMode 0x01 (bit7 LoRa, bit3
+// LowFrequencyModeOn = 0 for 915 MHz, mode 2-0), RegFrf 0x06-0x08 (Fstep =
+// 32 MHz / 2^19), RegPaConfig 0x09 (PA_BOOST: Pout = 17 - (15 - OutputPower)),
+// RegFifoAddrPtr 0x0D, RegFifoTxBaseAddr 0x0E, RegIrqFlags 0x12 (TxDone bit3,
+// write-to-clear), RegModemConfig1 0x1D (Bw 7-4, CR 3-1, implicit 0),
+// RegModemConfig2 0x1E (SF 7-4, RxPayloadCrcOn bit2), RegPreamble 0x20/0x21,
+// RegPayloadLength 0x22, RegModemConfig3 0x26 (bit3 LDRO/"MobileNode", bit2
+// AgcAutoOn), RegVersion 0x42.
+// NOT in the HopeRF table: RegSyncWord 0x39 (documented in Semtech's SX1276
+// datasheet; the reference firmware writes it directly, Telemetry.h:129-133).
 namespace {
 constexpr uint8_t REG_FIFO = 0x00, REG_OP_MODE = 0x01, REG_FRF_MSB = 0x06,
                   REG_PA_CONFIG = 0x09, REG_FIFO_ADDR_PTR = 0x0D,
@@ -65,8 +74,10 @@ bool radioInit() {
   ignis::SpiGuard g(500);
   if (!g.ok) return false;
   uint8_t ver = rd(REG_VERSION);
-  if (ver != 0x12) {
-    Serial.printf("[LORA] RegVersion=0x%02X (expected 0x12)\n", ver);
+  // HopeRF datasheet lists 0x11; SX1276 silicon commonly reads 0x12. Accept
+  // both; 0x00/0xFF (no module / dead bus) and anything else fail.
+  if (ver != 0x11 && ver != 0x12) {
+    Serial.printf("[LORA] RegVersion=0x%02X (expected 0x11 or 0x12)\n", ver);
     return false;
   }
   wr(REG_OP_MODE, MODE_LORA | MODE_SLEEP);   // LoRa bit only settable in sleep
@@ -84,7 +95,8 @@ bool radioInit() {
   wr(REG_PREAMBLE_MSB, (LORA_PREAMBLE_LEN >> 8) & 0xFF);
   wr(REG_PREAMBLE_LSB, LORA_PREAMBLE_LEN & 0xFF);
   wr(REG_SYNC_WORD, LORA_SYNC_WORD);
-  // PA_BOOST, Pout = 2 + OutputPower dBm. ASSUMPTION(v5): verify 17 dBm on the bench.
+  // PA_BOOST, Pout = 17 - (15 - OutputPower) dBm -> OutputPower 15 = 17 dBm
+  // (datasheet formula). Still measure the radiated power on the bench.
   wr(REG_PA_CONFIG, 0x80 | 0x70 | (uint8_t)(LORA_TX_POWER_DBM - 2));
   wr(REG_FIFO_TX_BASE, 0x00);
   bool ok = rd(REG_MODEM_CONFIG2) == ((LORA_SF << 4) | 0x04) && rd(REG_SYNC_WORD) == LORA_SYNC_WORD;

@@ -160,10 +160,10 @@ Changed versus the reference pin map: **SD_CS = IO41, SD_DETECT = IO42**
    98-byte payload. Verified offline: a v5-encoded packet decodes correctly with
    the unmodified `telemetry_parser_v12.py`. Over-the-air: still to be checked
    on the bench.
-3. **LSM6DSV32X / DPS368 / SX1276 register maps** were written from the
-   published register maps. The datasheet PDFs in `PCB_Project_IGNIS-v5/Components`
-   could not be text-extracted on this machine, so they were **not
-   cross-checked**. Each driver checks the chip ID and fails safe.
+3. **Driver registers checked against the datasheets in
+   `PCB_Project_IGNIS-v5/Components`** (DPS368 pages read in the PDF viewer;
+   LSM6DSV32X and RFM95W text decoded with a stdlib-only script). Section 5.1
+   has the results. Each driver also checks the chip ID at boot and fails safe.
 4. IMU: ±32 g, ±2000 dps, 480 Hz, gyro bias only (skipped on any resumed boot).
    Baro: 32 Hz × 8 oversampling. I2C at 400 kHz (reference: 100 kHz).
 5. LoRa PA: `RegPaConfig = 0x80|0x70|(17-2)` for 17 dBm on PA_BOOST. Measure it.
@@ -182,6 +182,14 @@ Changed versus the reference pin map: **SD_CS = IO41, SD_DETECT = IO42**
 11. If a reboot hits between the gate going HIGH and the NVS attempt write
     (a few ms), that attempt is not counted. The RTC mirror is written first
     and usually covers it.
+
+### 5.1 Datasheet check results
+
+| Part / datasheet | Checked | Result |
+|---|---|---|
+| DPS368 (Infineon v1.1) | Register map, PRS_CFG/TMP_CFG/MEAS_CFG/CFG_REG fields, rate and oversampling codes, soft reset `1001`, ID 0x10, COEF packing (Table 18), scale factors (Table 9), P/T formulas | **All match, no change** |
+| LSM6DSV32X (ST DS13511 Rev 2) | Register map, WHO_AM_I 0x70, CTRL1/2/3/6/8 fields, ODR `1000` = 480 Hz, FS codes, sensitivities (0.976 mg/LSB, 70 mdps/LSB, 256 LSB/°C, 0 LSB = 25 °C), I2C 0x6A/0x6B | **1 bug fixed:** CTRL8 bit 2 "must be set to 1"; the driver wrote 0x03, now writes 0x07 and reads back all three bits. Rest match. |
+| RFM95W (HopeRF) | RegOpMode (LoRa bit, LF-mode bit = 0 for 915 MHz), Frf step, PaConfig formula (17 dBm = 0xFF), FIFO pointers, IrqFlags TxDone, ModemConfig1/2/3 fields, preamble, payload length | **1 fix:** RegVersion is listed as 0x11 in this datasheet; the driver accepted only 0x12, and now accepts 0x11 or 0x12. RegSyncWord 0x39 is not in the HopeRF table (it is Semtech SX1276; the reference wrote it, `Telemetry.h:129-133`). Rest match. |
 
 ### Telemetry format
 Unchanged, 98 bytes, ground-station compatible. RECOVERY is sent as `state = 8`
@@ -232,7 +240,7 @@ Needs your approval and a ground-station update.
 (nothing was flashed). That includes:
 - e-match ignition at 500 ms
 - continuity polarity and how fast it reads open after an ignition
-- driver register maps and the pin map
+- the pin map (driver registers are now checked against the datasheets, section 5.1)
 - LoRa framing over the air and PA power
 - the reset_reason that RBF, EN and a brownout actually produce
 - OTA end-to-end, rollback, WiFi coexistence, SD timing, standby current
@@ -240,11 +248,11 @@ Needs your approval and a ground-station update.
 ### Build log
 | Build | Flags | Result |
 |---|---|---|
-| FLIGHT | defaults | OK, 0 warnings in `src/`, app 1,068,410 B, RAM 53,172 B |
+| FLIGHT | defaults | OK, 0 warnings in `src/`, app 1,068,430 B, RAM 53,172 B (after the datasheet fixes) |
 | No WiFi/OTA | `-DIGNIS_ENABLE_WIFI=0 -DIGNIS_ENABLE_OTA=0` | OK, 0 warnings in `src/`, app 448,715 B, RAM 26,252 B |
 | Guard | `-DGROUND_TEST_MODE=1` (flight build) | Fails with `#error "GROUND_TEST_MODE must be 0 when IGNIS_FLIGHT_BUILD is 1."` (host-clang preprocessing of `config_v5.h`) |
 | Guard | `-DIGNIS_ENABLE_WIFI=0` alone | Fails with `#error "IGNIS_ENABLE_OTA requires IGNIS_ENABLE_WIFI."` (host clang) |
-| Not built | GROUND build (`-DIGNIS_FLIGHT_BUILD=0 -DGROUND_TEST_MODE=1`) on ESP32 | Compile it before bench section 3 |
+| GROUND | `-DIGNIS_FLIGHT_BUILD=0 -DGROUND_TEST_MODE=1` | OK, 0 warnings in `src/`, app 1,068,474 B (needed for bench section 3; never fly it) |
 
 ---
 
