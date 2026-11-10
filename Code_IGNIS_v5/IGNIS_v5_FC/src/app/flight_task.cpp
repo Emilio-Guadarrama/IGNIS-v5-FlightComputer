@@ -3,7 +3,7 @@
 #include "esp_task_wdt.h"
 #include "../config/config_v5.h"
 #include "../core/flight_fsm.h"
-#include "../core/pyro_logic.h"
+#include "../core/pyro_sequencer.h"
 #include "../hal/app_state.h"
 #include "../hal/baro_dps368.h"
 #include "../hal/gps_battery.h"
@@ -18,26 +18,40 @@
 namespace ignis {
 
 static TaskHandle_t s_handle = nullptr;
-static bool s_recovery = false;
-static uint8_t s_persisted_mask = 0;   // channels commanded before this reset
+static BootDecision s_boot;
 
 TaskHandle_t flightTaskHandle() { return s_handle; }
 
 static void flightTask(void*) {
+  const PersistedFlight& pf = s_boot.merged;
   FlightFsm fsm;
-  fsm.begin(defaultFsmConfig(), s_recovery);
-  PyroLogic pyro(PYRO_FIRE_PULSE_MS);
-  // Requirement A: a recovery boot locks the pyro layer out BEFORE the first
-  // tick. There is no unlock path. (Second barrier after the FSM.)
-  if (s_recovery) pyro.lockout();
-  if (s_persisted_mask & 0x01) pyro.markSpent(PYRO_CH1_DROGUE);
-  if (s_persisted_mask & 0x02) pyro.markSpent(PYRO_CH2_MAIN);
+  PyroSequencer pyro;
+  pyro.begin(defaultPyroSeqConfig());
+  switch (s_boot.mode) {
+    case BootMode::RESUME_ASCENT:
+    case BootMode::RESUME_DESCENT:
+      fsm.beginResume(defaultFsmConfig(), pf.phase, pf.ground_pa);
+      break;
+    case BootMode::RECOVERY:
+      fsm.begin(defaultFsmConfig(), true);
+      break;
+    default:
+      fsm.begin(defaultFsmConfig(), false);
+      break;
+  }
+  pyro.restore(pf.attempts[0], pf.attempts[1]);
+  persistSeed(pf);
+  // RECOVERY locks the pyro layer out BEFORE the first tick. No unlock path.
+  // (Second barrier: the FSM never permits firing in RECOVERY either.)
+  if (fsm.state() == FlightState::RECOVERY) pyro.lockout();
+  else if (fsm.resumedDescent()) pyro.resumeAfterReboot(millis());
 
   esp_task_wdt_add(nullptr);   // subscribe this task; timeout unchanged (sdkconfig 5 s)
 
   FlightSnapshot s;
-  s.recovery_boot = s_recovery;
-  s.post_fire_latched = s_persisted_mask != 0 || g_post_fire.load();
+  s.recovery_boot = fsm.state() == FlightState::RECOVERY;
+  s.boot_mode = (uint8_t)s_boot.mode;
+  s.post_fire_latched = pf.attempts[0] || pf.attempts[1];
   s.reset_reason = g_boot.reset_reason;
   s.boot_count = g_boot.boot_count;
 
@@ -76,20 +90,19 @@ static void flightTask(void*) {
     FlightState before = fsm.state();
     FsmOutput out = fsm.step(in);
 
-    // ---- Pyro (gate first, then persist: flash never delays a fire)
-    uint8_t fired_mask = 0;
-    if (out.fire_drogue && pyroFire(pyro, PYRO_CH1_DROGUE, now)) fired_mask |= 0x01;
-    if (out.fire_main && pyroFire(pyro, PYRO_CH2_MAIN, now)) fired_mask |= 0x02;
-    bool fired_now = fired_mask != 0;
-    pyroService(pyro, now);
+    // ---- Pyro sequence (GPIO first, then persist: flash never delays a fire)
+    if (out.deploy_command) pyro.commandDeploy(now, s.cont);
+    uint8_t started = pyro.service(now, s.cont, out.fire_permitted);
+    pyroDrive(pyro);
+    bool fired_now = started != 0;
+    if (out.persist_phase == PHASE_BOOST) g_flight_latched = true;  // WiFi/OTA off for good
+    if (out.persist_phase != PHASE_NONE) {
+      persistPhase(out.persist_phase, out.persist_phase == PHASE_BOOST ? fsm.groundPressure() : 0.0f);
+    }
     if (fired_now) {
       g_post_fire = true;
       s.post_fire_latched = true;
-      nvsSetPostFire(fired_mask);
-    }
-    if (out.entered_boost) {
-      g_flight_latched = true;   // WiFi/OTA task sees this and shuts down for good
-      nvsSetFlightInProgress();
+      persistAttempts(pyro.attempts(PYRO_CH1_PRIMARY), pyro.attempts(PYRO_CH2_BACKUP));
     }
 
     // ---- Tilt: integrated gyro, diagnostic only (reference FlightState.h:104-128)
@@ -117,9 +130,11 @@ static void flightTask(void*) {
     s.max_agl_m = fsm.maxAgl();
     s.baro_vel_mps = fsm.baroVelocity();
     s.deploy_trigger = fsm.deployTrigger();
-    // fired() includes channels marked spent from the persisted mask.
-    s.pyro1_fired = pyro.fired(PYRO_CH1_DROGUE) || (s_persisted_mask & 0x01);
-    s.pyro2_fired = pyro.fired(PYRO_CH2_MAIN) || (s_persisted_mask & 0x02);
+    // attempts() includes attempts restored from before a reboot.
+    s.pyro_attempts[0] = pyro.attempts(PYRO_CH1_PRIMARY);
+    s.pyro_attempts[1] = pyro.attempts(PYRO_CH2_BACKUP);
+    s.pyro1_fired = s.pyro_attempts[0] > 0;
+    s.pyro2_fired = s.pyro_attempts[1] > 0;
     s.sd = sdStatus();
     s.sd_rows_dropped = sdRowsDropped();
     s.lora_ok = loraOk();
@@ -140,9 +155,8 @@ static void flightTask(void*) {
   }
 }
 
-void flightTaskStart(bool recovery_boot, uint8_t persisted_fired_mask) {
-  s_recovery = recovery_boot;
-  s_persisted_mask = persisted_fired_mask;
+void flightTaskStart(const BootDecision& boot) {
+  s_boot = boot;
   xTaskCreatePinnedToCore(flightTask, "flight", 8192, nullptr, TASK_PRIO_FLIGHT, &s_handle,
                           TASK_CORE_FLIGHT);
 }

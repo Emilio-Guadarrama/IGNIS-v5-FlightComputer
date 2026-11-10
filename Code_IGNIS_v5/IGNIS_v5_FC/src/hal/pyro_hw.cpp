@@ -37,22 +37,11 @@ Continuity pyroReadContinuity() {
   return c;
 }
 
-static inline uint8_t gatePin(PyroChannel ch) {
-  return ch == PYRO_CH1_DROGUE ? PIN_PYRO1_GATE : PIN_PYRO2_GATE;
-}
-
-bool pyroFire(PyroLogic& logic, PyroChannel ch, uint32_t now_ms) {
-  if (!logic.request(ch, now_ms)) return false;  // lockout / one-shot enforced here
-  digitalWrite(gatePin(ch), HIGH);
-  return true;
-}
-
-void pyroService(PyroLogic& logic, uint32_t now_ms) {
-  logic.service(now_ms);
-  // Mirror the logic state every tick: any channel not actively pulsing is
-  // driven LOW again (covers lockout and pulse end).
-  if (!logic.gateOn(PYRO_CH1_DROGUE)) digitalWrite(PIN_PYRO1_GATE, LOW);
-  if (!logic.gateOn(PYRO_CH2_MAIN)) digitalWrite(PIN_PYRO2_GATE, LOW);
+void pyroDrive(const PyroSequencer& seq) {
+  // Mirror the sequencer every tick: HIGH only while that channel's attempt
+  // pulse is active, LOW otherwise (pulse end, lockout, idle).
+  digitalWrite(PIN_PYRO1_GATE, seq.gateOn(PYRO_CH1_PRIMARY) ? HIGH : LOW);
+  digitalWrite(PIN_PYRO2_GATE, seq.gateOn(PYRO_CH2_BACKUP) ? HIGH : LOW);
 }
 
 }  // namespace ignis

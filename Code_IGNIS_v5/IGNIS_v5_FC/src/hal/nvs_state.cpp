@@ -1,5 +1,6 @@
 #include "nvs_state.h"
 #include <Arduino.h>
+#include <string.h>
 #include "esp_attr.h"
 #include "nvs.h"
 #include "nvs_flash.h"
@@ -9,42 +10,51 @@ namespace ignis {
 static const char* kNs = "ignis5";
 static nvs_handle_t s_nvs = 0;
 static bool s_open = false;
-static bool s_flight_written = false;
-static bool s_fire_written = false;
-static uint8_t s_fire_mask = 0;   // bit0 = CH1 drogue, bit1 = CH2 main
+static PersistedFlight s_cur;     // what is currently persisted
 
-// ---- RTC mirror ---------------------------------------------------------------
-static constexpr uint32_t kRtcMagic = 0x49474E35UL;  // 'IGN5'
-struct RtcFlags { uint32_t magic; uint8_t flight; uint8_t post_fire; uint8_t inv_flight; uint8_t inv_post_fire; };
-RTC_NOINIT_ATTR static RtcFlags s_rtc;
+// ---- RTC mirror (survives SW/WDT/panic resets, not power-on) ----------------
+static constexpr uint32_t kRtcMagic = 0x49474E36UL;  // 'IGN6' (layout v2)
+struct RtcRecord {
+  uint32_t magic;
+  uint8_t phase, att1, att2, pad;
+  float ground_pa;
+  uint32_t check;
+};
+RTC_NOINIT_ATTR static RtcRecord s_rtc;
 
-void rtcMirrorRead(PersistFlags& out, bool& valid) {
-  valid = (s_rtc.magic == kRtcMagic) &&
-          (uint8_t)~s_rtc.flight == s_rtc.inv_flight &&
-          (uint8_t)~s_rtc.post_fire == s_rtc.inv_post_fire;
-  out.flight_in_progress = valid && s_rtc.flight;
-  out.post_fire = valid && s_rtc.post_fire;
+static uint32_t rtcCheck(const RtcRecord& r) {
+  uint32_t g;
+  memcpy(&g, &r.ground_pa, 4);
+  return (r.magic ^ 0xA5A5A5A5u) + ((uint32_t)r.phase << 16) + ((uint32_t)r.att1 << 8) + r.att2 + g * 31u;
 }
 
-void rtcMirrorSet(const PersistFlags& f) {
-  s_rtc.flight = f.flight_in_progress ? 1 : 0;
-  s_rtc.post_fire = f.post_fire ? 1 : 0;
-  s_rtc.inv_flight = (uint8_t)~s_rtc.flight;
-  s_rtc.inv_post_fire = (uint8_t)~s_rtc.post_fire;
-  s_rtc.magic = kRtcMagic;
+void rtcMirrorRead(PersistedFlight& out, bool& valid) {
+  valid = s_rtc.magic == kRtcMagic && s_rtc.check == rtcCheck(s_rtc);
+  out = PersistedFlight();
+  if (!valid) return;
+  out.phase = s_rtc.phase;
+  out.attempts[0] = s_rtc.att1;
+  out.attempts[1] = s_rtc.att2;
+  out.ground_pa = s_rtc.ground_pa;
 }
 
-void rtcMirrorClear() { rtcMirrorSet(PersistFlags{}); }
+static void rtcWrite(const PersistedFlight& p) {
+  RtcRecord r{};
+  r.magic = kRtcMagic;
+  r.phase = p.phase;
+  r.att1 = p.attempts[0];
+  r.att2 = p.attempts[1];
+  r.ground_pa = p.ground_pa;
+  r.check = rtcCheck(r);
+  s_rtc = r;
+}
 
 // ---- NVS ----------------------------------------------------------------------
 NvsBootRead nvsBootRead(bool power_on_reset) {
   NvsBootRead r;
   esp_err_t e = nvs_flash_init();
   if (e == ESP_ERR_NVS_NO_FREE_PAGES || e == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-    // Erase ONLY on a power-on reset, where the flags would be cleared anyway.
-    // On any other reset, erasing could destroy a post-fire flag: report
-    // not-ok and let boot_policy fail closed (RECOVERY).
-    if (!power_on_reset) return r;
+    if (!power_on_reset) return r;      // never erase a possible flight record
     if (nvs_flash_erase() != ESP_OK) return r;
     e = nvs_flash_init();
   }
@@ -52,22 +62,20 @@ NvsBootRead nvsBootRead(bool power_on_reset) {
   if (nvs_open(kNs, NVS_READWRITE, &s_nvs) != ESP_OK) return r;
   s_open = true;
 
-  uint8_t flight = 0, fire = 0;
+  uint8_t phase = 0, a1 = 0, a2 = 0;
+  uint32_t gbits = 0;
   uint16_t boots = 0;
-  esp_err_t e1 = nvs_get_u8(s_nvs, "flight", &flight);
-  esp_err_t e2 = nvs_get_u8(s_nvs, "postfire", &fire);
-  esp_err_t e3 = nvs_get_u16(s_nvs, "boots", &boots);
-  bool readOk = (e1 == ESP_OK || e1 == ESP_ERR_NVS_NOT_FOUND) &&
-                (e2 == ESP_OK || e2 == ESP_ERR_NVS_NOT_FOUND) &&
-                (e3 == ESP_OK || e3 == ESP_ERR_NVS_NOT_FOUND);
+  auto okOrMissing = [](esp_err_t x) { return x == ESP_OK || x == ESP_ERR_NVS_NOT_FOUND; };
+  bool readOk = okOrMissing(nvs_get_u8(s_nvs, "phase", &phase)) &&
+                okOrMissing(nvs_get_u8(s_nvs, "att1", &a1)) &&
+                okOrMissing(nvs_get_u8(s_nvs, "att2", &a2)) &&
+                okOrMissing(nvs_get_u32(s_nvs, "gndpa", &gbits)) &&
+                okOrMissing(nvs_get_u16(s_nvs, "boots", &boots));
   if (!readOk) return r;
-
-  r.flags.flight_in_progress = flight != 0;
-  r.flags.post_fire = fire != 0;
-  r.fired_mask = fire & 0x03;
-  s_flight_written = r.flags.flight_in_progress;
-  s_fire_written = r.flags.post_fire;
-  s_fire_mask = r.fired_mask;
+  r.pf.phase = phase;
+  r.pf.attempts[0] = a1;
+  r.pf.attempts[1] = a2;
+  memcpy(&r.pf.ground_pa, &gbits, 4);
 
   // Boot counter: one write per boot (reference IGNIS_FC_heavy_13.ino:110-116).
   r.boot_count = (uint16_t)(boots + 1);
@@ -76,42 +84,44 @@ NvsBootRead nvsBootRead(bool power_on_reset) {
   return r;
 }
 
-bool nvsClearFlags() {
-  s_flight_written = false;
-  s_fire_written = false;
-  s_fire_mask = 0;
-  rtcMirrorClear();
+void persistSeed(const PersistedFlight& pf) {
+  s_cur = pf;
+  rtcWrite(s_cur);
+}
+
+static bool nvsWriteAll() {
   if (!s_open) return false;
-  bool ok = nvs_set_u8(s_nvs, "flight", 0) == ESP_OK &&
-            nvs_set_u8(s_nvs, "postfire", 0) == ESP_OK;
+  uint32_t gbits;
+  memcpy(&gbits, &s_cur.ground_pa, 4);
+  bool ok = nvs_set_u8(s_nvs, "phase", s_cur.phase) == ESP_OK &&
+            nvs_set_u8(s_nvs, "att1", s_cur.attempts[0]) == ESP_OK &&
+            nvs_set_u8(s_nvs, "att2", s_cur.attempts[1]) == ESP_OK &&
+            nvs_set_u32(s_nvs, "gndpa", gbits) == ESP_OK;
   return ok && nvs_commit(s_nvs) == ESP_OK;
 }
 
-static bool writeFlag(const char* key) {
-  if (!s_open) return false;
-  return nvs_set_u8(s_nvs, key, 1) == ESP_OK && nvs_commit(s_nvs) == ESP_OK;
+bool persistClear() {
+  s_cur = PersistedFlight();
+  rtcWrite(s_cur);
+  return nvsWriteAll();
 }
 
-bool nvsSetFlightInProgress() {
-  PersistFlags f; bool v; rtcMirrorRead(f, v);
-  f.flight_in_progress = true;
-  rtcMirrorSet(f);                    // instant, no flash
-  if (s_flight_written) return true;  // transition-only write
-  s_flight_written = true;
-  return writeFlag("flight");
+bool persistPhase(uint8_t phase, float ground_pa) {
+  bool changed = false;
+  if (phase > s_cur.phase) { s_cur.phase = phase; changed = true; }   // phases only move forward
+  if (ground_pa > 0 && ground_pa != s_cur.ground_pa) { s_cur.ground_pa = ground_pa; changed = true; }
+  if (!changed) return true;           // transition-only write
+  rtcWrite(s_cur);                     // instant
+  return nvsWriteAll();                // flash (after the fact)
 }
 
-bool nvsSetPostFire(uint8_t channel_mask) {
-  PersistFlags f; bool v; rtcMirrorRead(f, v);
-  f.post_fire = true;
-  f.flight_in_progress = true;
-  rtcMirrorSet(f);
-  uint8_t next = s_fire_mask | channel_mask;
-  if (s_fire_written && next == s_fire_mask) return true;  // transition-only write
-  s_fire_written = true;
-  s_fire_mask = next;
-  if (!s_open) return false;
-  return nvs_set_u8(s_nvs, "postfire", next) == ESP_OK && nvs_commit(s_nvs) == ESP_OK;
+bool persistAttempts(uint8_t a1, uint8_t a2) {
+  if (a1 == s_cur.attempts[0] && a2 == s_cur.attempts[1]) return true;
+  s_cur.attempts[0] = a1;
+  s_cur.attempts[1] = a2;
+  if (s_cur.phase < 3) s_cur.phase = 3;  // PHASE_DESCENT
+  rtcWrite(s_cur);
+  return nvsWriteAll();
 }
 
 }  // namespace ignis
