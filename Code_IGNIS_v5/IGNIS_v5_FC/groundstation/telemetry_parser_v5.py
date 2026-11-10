@@ -4,7 +4,9 @@ IGNIS Ground Station: telemetry parser for IGNIS v5 firmware.
 Same 98-byte packet as parser v12 (packet version 11). The byte layout is
 UNCHANGED; the only difference is the state table:
     0 = SAFE (was PAD_IDLE; same pad slot, so `state <= 1` pad checks still hold)
-    8 = RECOVERY (new: FC rebooted after flight start/fire; log + telemetry only)
+    5 = DESCENT (single deployment: under the parachute until LANDED)
+    8 = RECOVERY (rebooted after landing / without a usable flight record)
+pyro1_fired / pyro2_fired = at least one attempt (CH1 primary, CH2 backup).
 
 Derived from IGNIS_FC_heavy_13/groundstation/telemetry_parser_v12.py. Keep in
 sync with src/core/telemetry_packet.h (static_assert == 98).
@@ -32,7 +34,7 @@ _FIELDS_V11 = [
 
 STATE_NAMES = {
     0: "SAFE", 1: "ARMED", 2: "BOOST", 3: "COAST", 4: "APOGEE",
-    5: "DROGUE_DESCENT", 6: "MAIN_DESCENT", 7: "LANDED", 8: "RECOVERY",
+    5: "DESCENT", 6: "MAIN_DESCENT(unused)", 7: "LANDED", 8: "RECOVERY",
 }
 STATE_BOOST = 2
 STATE_RECOVERY = 8
@@ -76,7 +78,7 @@ def parse(payload: bytes) -> Optional[Packet]:
 def recovery_alarm(p: Packet) -> Optional[str]:
     if p.state == STATE_RECOVERY:
         return (f"FC in RECOVERY after reset ({p.reset_reason_name}); "
-                "SRAD pyro locked out until power cycle")
+                "pyro locked out until power cycle")
     return None
 
 
