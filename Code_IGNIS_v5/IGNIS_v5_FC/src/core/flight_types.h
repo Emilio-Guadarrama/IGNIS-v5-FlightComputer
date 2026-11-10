@@ -91,7 +91,9 @@ struct FlightSnapshot {
   uint8_t reset_reason = 0;
   uint8_t deploy_trigger = DEPLOY_NONE;
   bool recovery_boot = false;
-  bool post_fire_latched = false;
+  bool post_fire_latched = false;     // any pyro attempt made (this boot or before a reboot)
+  uint8_t boot_mode = 0;              // BootMode: 0 NORMAL, 1 RESUME_ASCENT, 2 RESUME_DESCENT, 3 RECOVERY
+  uint8_t pyro_attempts[2] = {0, 0};  // attempts per channel (CH1 primary, CH2 backup), incl. before reboot
 
   // Subsystem status (filled by main from task heartbeats)
   SdStatus sd = SdStatus::NO_CARD;
