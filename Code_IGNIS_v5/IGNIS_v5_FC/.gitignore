@@ -1,0 +1,9 @@
+# Secrets: never commit
+secrets.h
+
+# Host test build outputs
+test/host/build/
+
+# Arduino CLI build outputs
+build/
+src/config/build_info.h
