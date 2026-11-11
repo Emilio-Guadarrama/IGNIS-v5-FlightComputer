@@ -17,3 +17,12 @@ Project Outputs*/
 # Windows
 Thumbs.db
 desktop.ini
+History/
+__Previews__/
+Project Logs*/
+*.~(*)
+*.PrjPcbStructure
+.Outputs/
+__pycache__/
+*.pyc
+*.pyo

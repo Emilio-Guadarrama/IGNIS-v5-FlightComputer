@@ -1,0 +1,263 @@
+PARTS LIST
+
+100nF             CAPC2013X145X50NL20T25C1
+1uF               FP-0805-L_2_01_0_2-W_1_25-MFGC2
+100nF             CAPC2013X145X50NL20T25C3
+22uF              CAPC0805(2012)145_LC4
+10uF              FP-C0805C-DN-MFGC5
+100nF             FP-C0805C-DN-MFGC6
+10uF              FP-C0805C-DN-MFGC7
+100nF             FP-C0805C-DN-MFGC8
+10uF              FP-C0805C-DN-MFGC9
+100nF             FP-C0805C-DN-MFGC10
+10uF              FP-C0805C-DN-MFGC11
+100nF             FP-C0805C-DN-MFGC12
+100nF             FP-C0805C-DN-MFGC13
+100nF             FP-C0805C-DN-MFGC14
+100nF             FP-C0805C-DN-MFGC15
+100nF             FP-C0805C-DN-MFGC16
+100nF             FP-C0805C-DN-MFGC17
+10uF              FP-C0805C-DN-MFGC18
+100nF             FP-C0805C-DN-MFGC19
+100nF             FP-C0805C-DN-MFGC20
+2.2uF             FP-C0805C-DN-MFGC21
+100nF             FP-C0805C-DN-MFGC22
+100nF             FP-C0805C-DN-MFGC23
+100nF             FP-C0805C-DN-MFGC24
+22uF              FP-C0805C-DN-MFGC25
+100nF             FP-C0805C-DN-MFGC26
+100nF             FP-C0805C-DN-MFGC27
+100nF             FP-C0805C-DN-MFGC28
+10uF              FP-C0805C-DN-MFGC29
+10uF              FP-C0805C-DN-MFGC30
+10uF              FP-C0805C-DN-MFGC31
+10uF              FP-C0805C-DN-MFGC32
+thd2528-11sd-gf   PCBComponent_1  CARD1
+SML-LXT0805IW-TR  LEDC2012X120N   D1
+SS24              DIOM4336X265N   D2
+SML-LXT0805IW-TR  LEDC2012X120N   D3
+1N4148W           SODFL3816X120N  D4
+SML-LXT0805IW-TR  LEDC2012X120N   D5
+SML-LXT0805IW-TR  LEDC2012X120N   D6
+SML-LXT0805IW-TR  LEDC2012X120N   D7
+SML-LXT0805IW-TR  LEDC2012X120N   D8
+TYPE-C-31-M-12    HRO_TYPE-C-31-M-12J1
+SM04B-SRSS-TB(LF)(SN)JST_SM04B-SRSS-TB(LF)(SN)J2
+XT30PW-M          AMASS_XT30PW-M  J3
+BWSMA-KE-Z001     BAT_WIRELESS_BWSMA-KE-Z001J4
+1727036           PHOENIX_1727036 J5
+WS2812B           *LED3535        LED1
+WS2812B           *LED3535        LED2
+WS2812B           *LED3535        LED3
+MLT-8530          MLT-8530_JHE    LS1
+ESP32-S3-WROOM-1-N16R8XCVR_ESP32-S3-WROOM-1-N16R2MCU1
+NTS4001NT1G       SOT65P220X100-3NQ
+S8050_NPN         SOT-23          Q1
+NCE6005AR         PCBComponent_1  Q2
+SS8550_PNP        SOT95P252X140-3NQ3
+S8050_NPN         SOT-23          Q4
+NCE6005AR         PCBComponent_1  Q5
+SS8550_PNP        SOT95P252X140-3NQ6
+10k               FP-MCT0603-IPC_AR1
+10k               FP-MCT0603-IPC_AR2
+5.1k              FP-MCT0603-IPC_AR3
+5.1k              FP-MCT0603-IPC_AR4
+22                FP-MCT0603-IPC_AR5
+1k                FP-MCT0603-IPC_AR6
+22                FP-MCT0603-IPC_AR7
+47k               FP-MCT0603-IPC_AR8
+100k              FP-MCT0603-IPC_AR9
+470               FP-MCT0603-IPC_AR10
+470               FP-MCT0603-IPC_AR11
+1k                FP-MCT0603-IPC_AR12
+10k               FP-MCT0603-IPC_AR13
+10k               FP-MCT0603-IPC_AR14
+4k7               FP-MCT0603-IPC_AR15
+4k7               FP-MCT0603-IPC_AR16
+10k               FP-MCT0603-IPC_AR17
+10k               FP-MCT0603-IPC_AR18
+10k               FP-MCT0603-IPC_AR19
+10k               FP-MCT0603-IPC_AR20
+10k               FP-MCT0603-IPC_AR21
+33                FP-MCT0603-IPC_AR23
+10k               FP-MCT0603-IPC_AR24
+1k                FP-MCT0603-IPC_AR25
+100               FP-MCT0603-IPC_AR26
+100               FP-MCT0603-IPC_AR27
+1k                FP-MCT0603-IPC_AR28
+1k                FP-MCT0603-IPC_AR29
+680               FP-MCT0603-IPC_AR30
+1k                FP-MCT0603-IPC_AR31
+1k                FP-MCT0603-IPC_AR32
+100               FP-MCT0603-IPC_AR33
+100               FP-MCT0603-IPC_AR34
+1k                FP-MCT0603-IPC_AR35
+680               FP-MCT0603-IPC_AR36
+1k                FP-MCT0603-IPC_AR37
+1k                FP-MCT0603-IPC_AR38
+Reset             SW_SKRPABE010   S1
+Boot              SW_SKRPABE010   S2
+AMS1117-5.0       SOT229P700X180-4NU1
+AMS1117-3.3       SOT229P700X180-4NU2
+SAM-M10Q-00B      XCVR_SAM-M10Q-00BU3
+RFM95W-915S2      XCVR_RFM95W-868S2U4
+LSM6DSV32XTR      LGA-14L_2p5X3p0X0p86_STMU5
+DPS368XTSA1 / BMP280XDCR_BMP280     U6
+PC817X2NIP1B      SOIC254P960X420-4NU7
+PC817X2NIP1B      SOIC254P960X420-4NU8
+PC817X2NIP1B      SOIC254P960X420-4NU9
+PC817X2NIP1B      SOIC254P960X420-4NU10
+EOS
+NET LIST
+
+NODENAME WS2812B_DATA     $
+    MCU1       6  R23        1
+NODENAME VCC_5V           $
+    C7         1  C8         1  C9         1  C10        1  D2         C  D4         C  LS1        1  U1         2  U2         3
+NODENAME VCC_3V3          $
+    C3         1  C4         1  C11        1  C12        1  C14        1  C15        1  C16        1  C17        1  C18        1  C19        2  C20        2  C21        2  C22        2  C23        2  C24        1  C25        1  C26        1  C27        1  C28        1  C29        1  C30        1  C31        1  C32        1  CARD1      4  D1         A  J2         1  LED1       1  LED2       1  LED3       1  MCU1       2  R1         1  R2         1  R13        1  R15        1  R16        1  R17        1  R18        1  R19        1  R20        1  R21        1  U2         2  U3         2  U3         3  U3        17  U4        13  U5         5  U5         8  U5        12  U6         2  U6         6  U6         8  U8         4  U10        4
+NODENAME VBUS             $
+    D2         A  J1     A4_B9  J1     B4_A9
+NODENAME VBAT_MON         $
+    C13        1  MCU1      15  R8         1  R9         1
+NODENAME VBAT             $
+    C5         1  C6         1  J3         P  J5        01  J5        03  Q1         3  Q4         3  R9         2  U1         3  U7         4  U9         4
+NODENAME USB2_P           $
+    MCU1      14  R5         1
+NODENAME USB2_N           $
+    MCU1      13  R7         1
+NODENAME TXD0             $
+    J2         2  MCU1      37
+NODENAME SNS_SPI_SCK      $
+    CARD1      5  MCU1      20  U4         4
+NODENAME SNS_SPI_MOSI     $
+    CARD1      3  MCU1      19  R13        2  U4         3
+NODENAME SNS_SPI_MISO     $
+    CARD1      7  MCU1      21  R18        2  U4         2
+NODENAME SNS_I2C_SDA      $
+    MCU1      23  R16        2  U5        14  U6         3
+NODENAME SNS_I2C_SCL      $
+    MCU1      31  R15        2  U5        13  U6         4
+NODENAME SDO              $
+  
+NODENAME SD_DETECT        $
+    CARD1      9  MCU1      35  R21        2
+NODENAME SD_CS            $
+    CARD1      2  MCU1      34  R17        2
+NODENAME RXD0             $
+    J2         3  MCU1      36
+NODENAME RFM95W_RESET     $
+    MCU1      12  U4         6
+NODENAME RFM95W_INT       $
+    MCU1       7  U4        14
+NODENAME RFM95W_CS        $
+    MCU1      18  U4         5
+NODENAME RESET_GPS        $
+    MCU1       9
+NODENAME RESET            $
+    C2         1  MCU1       3  R1         2  S1         1  S1         2
+NODENAME PYRO_CH2_GATE    $
+    MCU1       5  U7         1
+NODENAME PYRO_CH2_CONT    $
+    MCU1      38  R31        1  U8         3
+NODENAME PYRO_CH1_GATE    $
+    MCU1       4  U9         1
+NODENAME PYRO_CH1_CONT    $
+    MCU1      39  R35        1  U10        3
+NODENAME PPS_GPS          $
+    MCU1      32
+NODENAME NetU3-19         $
+    U3        19
+NODENAME NetU3-18         $
+    U3        18
+NODENAME NetR34-1         $
+    R34        1  U9         2
+NODENAME NetR27-1         $
+    R27        1  U7         2
+NODENAME NetR14-2         $
+    R14        2  U6         5
+NODENAME NetR11-1         $
+    R11        1  U3        14
+NODENAME NetR10-1         $
+    R10        1  U3        13
+NODENAME NetQ5-1          $
+    Q5         1  R33        2
+NODENAME NetQ4-2          $
+    Q4         2  Q6         2  R33        1
+NODENAME NetQ4-1          $
+    Q4         1  Q6         1  R32        2
+NODENAME NetQ2-1          $
+    Q2         1  R26        2
+NODENAME NetQ1-2          $
+    Q1         2  Q3         2  R26        1
+NODENAME NetQ1-1          $
+    Q1         1  Q3         1  R25        2
+NODENAME NetLED2-2        $
+    LED2       2  LED3       4
+NODENAME NetLED1-4        $
+    LED1       4  R23        2
+NODENAME NetLED1-2        $
+    LED1       2  LED2       4
+NODENAME NetJ4-1          $
+    J4         1  U4         9
+NODENAME NetJ1_B5         $
+    J1        B5  R4         1
+NODENAME NetJ1_A5         $
+    J1        A5  R3         1
+NODENAME NetD8_C          $
+    D8         C  R37        1
+NODENAME NetD8_A          $
+    D8         A  R32        1  R38        2  U9         3
+NODENAME NetD7_C          $
+    D7         C  R36        1
+NODENAME NetD7_A          $
+    D7         A  U10        2
+NODENAME NetD6_C          $
+    D6         C  R30        1
+NODENAME NetD6_A          $
+    D6         A  U8         2
+NODENAME NetD5_C          $
+    D5         C  R29        1
+NODENAME NetD5_A          $
+    D5         A  R25        1  R28        2  U7         3
+NODENAME NetD4_A          $
+    D4         A  LS1        2  Q          3
+NODENAME NetD3_C          $
+    D3         C  R12        1
+NODENAME NetD1_C          $
+    D1         C  R6         1
+NODENAME MPU6050_INT      $
+    MCU1      17
+NODENAME INT_GPS          $
+    MCU1       8
+NODENAME IMU_INT2         $
+    U5         9
+NODENAME IMU_INT1         $
+    U5         4
+NODENAME GPS_UART_TX      $
+    MCU1      10  R10        2
+NODENAME GPS_UART_RX      $
+    MCU1      11  R11        2
+NODENAME GPS_SAFEBOOT_N   $
+    U3         8
+NODENAME GPS_PPS          $
+    D3         A  U3         7
+NODENAME GND              $
+    C1         1  C2         2  C3         2  C4         2  C5         2  C6         2  C7         2  C8         2  C9         2  C10        2  C11        2  C12        2  C13        2  C14        2  C15        2  C16        2  C17        2  C18        2  C19        1  C20        1  C21        1  C22        1  C23        1  C24        2  C25        2  C26        2  C27        2  C28        2  C29        2  C30        2  C31        2  C32        2  CARD1      6  CARD1     10  CARD1     11  CARD1     12  CARD1     13  J1    A1_B12  J1    B1_A12  J1        S1  J1        S2  J1        S3  J1        S4  J2         4  J3         N  J4       2_1  J4       2_2  J4       2_3  J4       2_4  LED1       3  LED2       3  LED3       3  LS1        3  LS1        4  MCU1     GND  Q          2  Q2         3  Q3         3  Q5         3  Q6         3  R3         2  R4         2  R6         2  R8         2  R12        2  R14        1  R24        2  R27        2  R28        1  R29        2  R30        2  R31        2  R34        2  R35        2  R36        2  R37        2  R38        1  S1         3  S1         4  S2         3  S2         4  U1         1  U2         1  U3         1  U3         4  U3         5  U3         6  U3        10  U3        11  U3        15  U3        16  U3        20  U4         1  U4         8  U4        10  U5         1  U5         2  U5         3  U5         6  U5         7  U6         1  U6         7
+NODENAME EMATCH_CH2_N     $
+    J5        04  Q2         2  Q2         4  U8         1
+NODENAME EMATCH_CH1_B     $
+    J5        02  Q5         2  Q5         4  U10        1
+NODENAME DP               $
+    J1        A6  J1        B6  R5         2
+NODENAME DN               $
+    J1        A7  J1        B7  R7         2
+NODENAME DAT2             $
+    CARD1      1  R19        2
+NODENAME DAT1             $
+    CARD1      8  R20        2
+NODENAME BUZZER           $
+    MCU1      22  Q          1  R24        1
+NODENAME BOOT             $
+    C1         2  MCU1      27  R2         2  S2         1  S2         2
+EOS
