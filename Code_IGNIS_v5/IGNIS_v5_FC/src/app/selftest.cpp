@@ -54,6 +54,13 @@ void selftestService(uint32_t now) {
   Serial.printf("[SELFTEST] imu=%d baro=%d sd=%d cont=%d wdt=%d loop=%d -> %s (image %s)\n",
                 r.imu, r.baro, r.sd, r.cont, r.wdt, r.loop, r.pass() ? "PASS" : "FAIL",
                 otaImageStateName());
+  // Diagnostic detail only: the pass criteria above are unchanged.
+  if (!r.sd) {
+    SdError e = sdLastError(), f = sdLastFailure();
+    Serial.printf("[SELFTEST] sd not logging: last=%u(%s) last_failure=%u(%s) mount_attempts=%lu failures=%lu\n",
+                  (unsigned)e, sdErrorName(e), (unsigned)f, sdErrorName(f),
+                  (unsigned long)sdMountAttempts(), (unsigned long)sdFailureCount());
+  }
   if (st != ESP_OTA_IMG_PENDING_VERIFY) return;   // not a fresh OTA image: report only
 
   if (r.pass()) {

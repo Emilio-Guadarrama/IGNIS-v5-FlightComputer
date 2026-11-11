@@ -48,6 +48,7 @@ h+=row('imu','a '+s.imu.a.map(x=>x.toFixed(2)).join(' ')+' |'+s.imu.at.toFixed(2
 h+=row('gps',(s.gps.fix?'FIX':'no fix')+' sats '+s.gps.sats+' '+s.gps.lat.toFixed(6)+','+s.gps.lon.toFixed(6)+' alt '+s.gps.alt.toFixed(1),s.gps.fix?'ok':'warn');
 h+=row('lora',(s.lora.ok?'OK':'DOWN')+' tx '+s.lora.tx+' last '+(s.lora.last?'ok':'fail')+' skipped '+s.lora.skip,s.lora.ok?'ok':'bad');
 h+=row('sd',s.sd.status+' '+s.sd.file+' dropped '+s.sd.dropped,s.sd.status=='LOGGING'?'ok':'bad');
+h+=row('sd diag','last '+s.sd.err+' '+s.sd.err_name+' / last failure '+s.sd.fail+' '+s.sd.fail_name+' / mounts '+s.sd.mounts+' fails '+s.sd.fails,s.sd.fails?'warn':'');
 h+=row('ota gate',s.ota_deny==0?'open (SAFE, no continuity)':'closed 0x'+s.ota_deny.toString(16));
 document.getElementById('t').innerHTML=h;}catch(e){}}
 setInterval(tick,P);tick();
@@ -82,7 +83,8 @@ static void handleState() {
     "\"vbat\":%.3f,\"cont\":{\"ch1\":%d,\"ch2\":%d,\"valid\":%d},\"attempts\":[%u,%u],"
     "\"gps\":{\"fix\":%d,\"sats\":%u,\"lat\":%.7f,\"lon\":%.7f,\"alt\":%.1f},"
     "\"lora\":{\"ok\":%d,\"tx\":%lu,\"last\":%d,\"skip\":%lu},"
-    "\"sd\":{\"status\":\"%s\",\"file\":\"%s\",\"dropped\":%lu},"
+    "\"sd\":{\"status\":\"%s\",\"file\":\"%s\",\"dropped\":%lu,"
+    "\"err\":%u,\"err_name\":\"%s\",\"fail\":%u,\"fail_name\":\"%s\",\"mounts\":%lu,\"fails\":%lu},"
     "\"reset_reason\":%u,\"reset_name\":\"%s\",\"boot_count\":%u,\"boot_mode\":\"%s\","
     "\"fw\":{\"name\":\"%s\",\"version\":\"%s\",\"git\":\"%s\",\"sha256\":\"%s\"},"
     "\"build\":{\"variant\":\"%s\",\"ground_test\":%d},\"ota_deny\":%lu}",
@@ -94,6 +96,8 @@ static void handleState() {
     s.gps_fix, (unsigned)s.gps_sats, s.gps_lat, s.gps_lon, s.gps_alt_m,
     s.lora_ok, (unsigned long)s.lora_tx_count, s.lora_last_tx_ok, (unsigned long)s.lora_skipped,
     sdName(s.sd), sdCurrentFile(), (unsigned long)s.sd_rows_dropped,
+    (unsigned)sdLastError(), sdErrorName(sdLastError()), (unsigned)sdLastFailure(), sdErrorName(sdLastFailure()),
+    (unsigned long)sdMountAttempts(), (unsigned long)sdFailureCount(),
     (unsigned)s.reset_reason, resetReasonName(s.reset_reason), (unsigned)s.boot_count,
     bootModeName((BootMode)s.boot_mode),
     IGNIS_FW_NAME, IGNIS_FW_VERSION, IGNIS_GIT_HASH, g_boot.app_sha256,
