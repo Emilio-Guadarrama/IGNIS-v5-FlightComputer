@@ -107,6 +107,17 @@ flowchart TD
 
 ---
 
+## Status and Documentation
+
+The v5 firmware is **preliminary and untested on hardware**: the flight computer boards have not arrived yet. Nothing here is approved for flight, and every pyro, arming and battery item is pending sign-off by the Avionics Lead.
+
+- [`docs/AUDIT_2026-11-10.md`](docs/AUDIT_2026-11-10.md): netlist and firmware audit, test results, findings table
+- [`docs/DEFERRED_2026-11-10.md`](docs/DEFERRED_2026-11-10.md): proposed changes not applied yet
+- [`docs/LAYOUT_PROPOSAL_2026-11-11.md`](docs/LAYOUT_PROPOSAL_2026-11-11.md): placement and routing proposal
+- [`Code_IGNIS_v5/IGNIS_v5_FC/CHANGES.md`](Code_IGNIS_v5/IGNIS_v5_FC/CHANGES.md): firmware change log and sign-off table
+
+---
+
 ## Project Structure
 
 ```
