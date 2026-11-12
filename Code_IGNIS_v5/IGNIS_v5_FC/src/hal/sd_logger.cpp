@@ -9,6 +9,12 @@
 
 namespace ignis {
 
+// core/sd_diag.h mirrors the SD library's card-type codes so it stays pure.
+static_assert((uint8_t)CARD_NONE == kSdCardNone && (uint8_t)CARD_MMC == kSdCardMmc &&
+              (uint8_t)CARD_SD == kSdCardSd && (uint8_t)CARD_SDHC == kSdCardSdhc &&
+              (uint8_t)CARD_UNKNOWN == kSdCardUnknown,
+              "sd_diag.h card-type codes no longer match the SD library (sd_defines.h)");
+
 struct SdItem {
   FlightSnapshot snap;
   uint8_t flags;
@@ -26,37 +32,112 @@ static uint32_t s_write_errors = 0;
 static char s_banner[200] = "";
 static char s_row[kCsvRowMax];
 
+// ---- Diagnostics (read-only reporting; never changes mount behavior) --------
+// Atomics are read by the dashboard task. The records and the line buffer are
+// touched only by setup() before the SD task exists, then only by the SD task.
+static std::atomic<uint8_t> s_last_error{(uint8_t)SdError::NONE};    // most recent mount attempt / write event
+static std::atomic<uint8_t> s_last_failure{(uint8_t)SdError::NONE};  // most recent non-NONE code this boot
+static std::atomic<uint32_t> s_mount_attempts{0};
+static std::atomic<uint32_t> s_fail_count{0};
+static SdMountDiag s_first_fail;        // first failure this boot
+static SdMountDiag s_last_fail;         // most recent failure this boot
+static bool s_first_fail_in_bootlog = false;
+static uint32_t s_fails_in_bootlog = 0; // s_fail_count when BOOTLOG.TXT was last appended
+static char s_diag_line[240];
+
+// Raw electrical level on SD_DETECT.
+static int sdDetectRaw() { return digitalRead(PIN_SD_DETECT); }
+
+// LOG-ONLY interpretation of the raw level under SD_DETECT_ACTIVE_LOW. Never
+// gates mounting: the THD2528-11SD-GF card-detect switch polarity is
+// UNVERIFIED (the repo datasheet is sheet 1 of 3 and has no switch circuit).
 static bool isCardPresent() {
-  int level = digitalRead(PIN_SD_DETECT);
+  int level = sdDetectRaw();
   return SD_DETECT_ACTIVE_LOW ? (level == LOW) : (level == HIGH);
 }
 
-// Caller holds the SPI mutex.
-static bool mountAndOpenLocked() {
-  if (!SD.begin(PIN_SD_CS, SPI, SD_SPI_HZ)) return false;
-  if (SD.cardType() == CARD_NONE) { SD.end(); return false; }
+static void recordFailure(const SdMountDiag& d) {
+  if (s_fail_count.load() == 0) s_first_fail = d;
+  s_last_fail = d;
+  s_fail_count++;
+  s_last_failure = (uint8_t)d.err;
+}
+
+// Caller holds the SPI mutex and the card is mounted. Appends the first and
+// the most recent failure seen this boot (RAM only: failures from before a
+// reset are not known here). Each record is written once.
+static void appendFailuresToBootlogLocked(File& b) {
+  uint32_t fails = s_fail_count.load();
+  if (fails == s_fails_in_bootlog) return;   // nothing new since the last append
+  if (!s_first_fail_in_bootlog) {
+    if (sdFormatDiag("sdfail first", s_first_fail, s_diag_line, sizeof(s_diag_line))) b.println(s_diag_line);
+    s_first_fail_in_bootlog = true;
+  }
+  if (fails > 1) {
+    char prefix[32];
+    snprintf(prefix, sizeof(prefix), "sdfail last n=%lu", (unsigned long)fails);
+    if (sdFormatDiag(prefix, s_last_fail, s_diag_line, sizeof(s_diag_line))) b.println(s_diag_line);
+  }
+  s_fails_in_bootlog = fails;
+}
+
+// Caller holds the SPI mutex. Fills d.card_type / scan_ms / names_scanned.
+static SdError mountAndOpenLocked(SdMountDiag& d) {
+  SdMountSteps st;
+  st.lock_ok = true;
+  st.begin_ok = SD.begin(PIN_SD_CS, SPI, SD_SPI_HZ);
+  if (!st.begin_ok) return sdClassifyMount(st);
+  st.card_type = (uint8_t)SD.cardType();
+  d.card_type = st.card_type;
+  if (st.card_type == kSdCardNone) { SD.end(); return sdClassifyMount(st); }
+  uint32_t scan_t0 = millis();
   for (int i = 0; i < 1000; i++) {
     snprintf(s_path, sizeof(s_path), "/V5F%04d.CSV", i);
-    if (!SD.exists(s_path)) break;
-    if (i == 999) { SD.end(); return false; }
+    d.names_scanned = (uint16_t)(i + 1);
+    if (!SD.exists(s_path)) { st.name_free = true; break; }
   }
+  d.scan_ms = millis() - scan_t0;
+  if (!st.name_free) { SD.end(); return sdClassifyMount(st); }
   s_file = SD.open(s_path, FILE_WRITE);
-  if (!s_file) { SD.end(); return false; }
+  st.open_ok = (bool)s_file;
+  if (!st.open_ok) { SD.end(); return sdClassifyMount(st); }
   s_file.println(kCsvHeader);
   s_file.flush();
   // Boot identity sidecar (keeps the CSV itself machine-parseable).
   File b = SD.open("/BOOTLOG.TXT", FILE_APPEND);
-  if (b) { b.printf("%s file=%s\n", s_banner, s_path); b.close(); }
-  return true;
+  if (b) {
+    b.printf("%s file=%s\n", s_banner, s_path);
+    appendFailuresToBootlogLocked(b);
+    b.close();
+  }
+  return sdClassifyMount(st);
 }
 
-static bool tryMount() {
-  SpiGuard g(3000);  // mount can take ~2 s with no card: pad states only
-  if (!g.ok) return false;
-  bool ok = mountAndOpenLocked();
-  s_status = (uint8_t)(ok ? SdStatus::LOGGING : SdStatus::NO_CARD);
-  if (ok) { s_write_errors = 0; s_last_flush_ms = millis(); }
-  return ok;
+static SdError tryMount() {
+  SdMountDiag d;
+  d.attempt = ++s_mount_attempts;
+  d.t_ms = millis();
+  d.cs_pin = PIN_SD_CS;
+  d.spi_hz = SD_SPI_HZ;
+  d.detect_raw = sdDetectRaw();
+  {
+    SpiGuard g(3000);  // mount can take ~2 s with no card: pad states only
+    if (!g.ok) {
+      SdMountSteps st;  // lock_ok = false: the card was never touched
+      d.err = sdClassifyMount(st);
+    } else {
+      uint32_t held_t0 = millis();
+      d.err = mountAndOpenLocked(d);
+      bool ok = d.err == SdError::NONE;
+      s_status = (uint8_t)(ok ? SdStatus::LOGGING : SdStatus::NO_CARD);
+      if (ok) { s_write_errors = 0; s_last_flush_ms = millis(); }
+      d.lock_held_ms = millis() - held_t0;
+    }
+  }  // mutex released before any serial output
+  s_last_error = (uint8_t)d.err;
+  if (d.err != SdError::NONE) recordFailure(d);
+  if (sdFormatDiag("[SD]", d, s_diag_line, sizeof(s_diag_line))) Serial.println(s_diag_line);
+  return d.err;
 }
 
 static void sdTask(void*) {
@@ -69,8 +150,7 @@ static void sdTask(void*) {
     if (st != SdStatus::LOGGING) {
       if (pad && st != SdStatus::CLOSED && millis() - s_last_mount_ms >= SD_MOUNT_RETRY_INTERVAL_MS) {
         s_last_mount_ms = millis();
-        Serial.printf("[SD] mount retry (detect=%s)\n", isCardPresent() ? "present" : "absent");
-        tryMount();
+        tryMount();  // prints one diagnostic line (raw SD_DETECT level included)
       }
       continue;  // row not logged (no card)
     }
@@ -89,11 +169,22 @@ static void sdTask(void*) {
     w += s_file.write((const uint8_t*)"\n", 1);
     if (w != n + 1) {
       if (++s_write_errors >= 3) {
+        SdMountDiag d;
+        d.err = SdError::WRITE_ERRORS;
+        d.attempt = s_mount_attempts.load();   // the mount this file belonged to
+        d.t_ms = millis();
+        d.cs_pin = PIN_SD_CS;
+        d.spi_hz = SD_SPI_HZ;
+        d.detect_raw = sdDetectRaw();
+        d.card_type = (uint8_t)SD.cardType();  // cached by the library, no bus access
         s_file.close();
         SD.end();
         s_status = (uint8_t)SdStatus::ERROR;
         s_last_mount_ms = millis();
+        s_last_error = (uint8_t)d.err;
+        recordFailure(d);
         Serial.println("[SD] repeated write errors: logging stopped");
+        if (sdFormatDiag("[SD]", d, s_diag_line, sizeof(s_diag_line))) Serial.println(s_diag_line);
       }
       continue;
     }
@@ -111,9 +202,14 @@ bool sdLoggerStart(const char* boot_banner) {
   pinMode(PIN_SD_DETECT, INPUT);  // TODO(v5-unconfirmed): external pull assumed (reference R28)
   s_q = xQueueCreate(SD_QUEUE_DEPTH, sizeof(SdItem));
   if (!s_q) return false;
+  // Raw level only. The interpretation is labeled as an assumption, not a fact.
+  Serial.printf("[SD] SD_DETECT IO%d raw=%d (switch polarity UNVERIFIED; SD_DETECT_ACTIVE_LOW=%d would read this as card %s; not used to gate mounting)\n",
+                PIN_SD_DETECT, sdDetectRaw(), SD_DETECT_ACTIVE_LOW, isCardPresent() ? "present" : "absent");
   s_last_mount_ms = millis();
-  bool ok = tryMount();
-  Serial.printf("[SD] %s %s\n", ok ? "logging to" : "not mounted", ok ? s_path : "(continuing without SD)");
+  SdError err = tryMount();
+  bool ok = err == SdError::NONE;
+  if (ok) Serial.printf("[SD] logging to %s\n", s_path);
+  else Serial.printf("[SD] not mounted (continuing without SD) err=%u(%s)\n", (unsigned)err, sdErrorName(err));
   xTaskCreatePinnedToCore(sdTask, "sd", 6144, nullptr, TASK_PRIO_SD, nullptr, TASK_CORE_SD);
   return ok;
 }
@@ -131,6 +227,10 @@ SdStatus sdStatus() { return (SdStatus)s_status.load(); }
 uint32_t sdRowsDropped() { return s_dropped.load(); }
 uint32_t sdHeartbeat() { return s_heartbeat.load(); }
 const char* sdCurrentFile() { return s_path; }
+SdError sdLastError() { return (SdError)s_last_error.load(); }
+SdError sdLastFailure() { return (SdError)s_last_failure.load(); }
+uint32_t sdMountAttempts() { return s_mount_attempts.load(); }
+uint32_t sdFailureCount() { return s_fail_count.load(); }
 
 bool sdListLogs(SdListCb cb, void* ctx) {
   if (sdStatus() != SdStatus::LOGGING) return false;
