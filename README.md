@@ -57,6 +57,12 @@ previous versions. **All the areas of opportunity identified in earlier revision
 | PCB | 4-layer · Altium Designer · JLCPCB fabrication and assembly |
 | Apogee range | Adaptive, real-time apogee detection · 500 m to 3 km rockets |
 
+### Proposed board layout (preliminary reference)
+
+![Proposed placement zones](docs/images/placement_zones_2026-11-11.svg)
+
+Zone sketch only: it shows where each block would sit on the octagonal board. It is **not** a layout and has not been checked in Altium. The reasoning, crossing count, trace widths and open questions are in [`docs/LAYOUT_PROPOSAL_2026-11-11.md`](docs/LAYOUT_PROPOSAL_2026-11-11.md). Pyro and high-current items there are pending sign-off by the Avionics Lead.
+
 ---
 
 ## System Architecture
