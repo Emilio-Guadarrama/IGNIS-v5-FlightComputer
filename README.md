@@ -61,7 +61,7 @@ previous versions. **All the areas of opportunity identified in earlier revision
 
 ![Proposed placement zones](docs/images/placement_zones_2026-11-11.svg)
 
-Zone sketch only: it shows where each block would sit on the octagonal board. It is **not** a layout and has not been checked in Altium. The reasoning, crossing count, trace widths and open questions are in [`docs/LAYOUT_PROPOSAL_2026-11-11.md`](docs/LAYOUT_PROPOSAL_2026-11-11.md). Pyro and high-current items there are pending sign-off by the Avionics Lead.
+Zone sketch only: it shows where each block would sit on the octagonal board. It is **not** a layout and has not been checked in Altium. The reasoning, crossing count, trace widths and open questions are in [`docs/ai/LAYOUT_PROPOSAL_2026-11-11.md`](docs/ai/LAYOUT_PROPOSAL_2026-11-11.md). Pyro and high-current items there are pending sign-off by the Avionics Lead.
 
 ---
 
@@ -111,9 +111,9 @@ flowchart TD
 
 The v5 firmware is **preliminary and untested on hardware**: the flight computer boards have not arrived yet. Nothing here is approved for flight, and every pyro, arming and battery item is pending sign-off by the Avionics Lead.
 
-- [`docs/AUDIT_2026-11-10.md`](docs/AUDIT_2026-11-10.md): netlist and firmware audit, test results, findings table
-- [`docs/DEFERRED_2026-11-10.md`](docs/DEFERRED_2026-11-10.md): proposed changes not applied yet
-- [`docs/LAYOUT_PROPOSAL_2026-11-11.md`](docs/LAYOUT_PROPOSAL_2026-11-11.md): placement and routing proposal
+- [`docs/ai/AUDIT_2026-11-10.md`](docs/ai/AUDIT_2026-11-10.md): netlist and firmware audit, test results, findings table
+- [`docs/ai/DEFERRED_2026-11-10.md`](docs/ai/DEFERRED_2026-11-10.md): proposed changes not applied yet
+- [`docs/ai/LAYOUT_PROPOSAL_2026-11-11.md`](docs/ai/LAYOUT_PROPOSAL_2026-11-11.md): placement and routing proposal
 - [`Code_IGNIS_v5/IGNIS_v5_FC/CHANGES.md`](Code_IGNIS_v5/IGNIS_v5_FC/CHANGES.md): firmware change log and sign-off table
 
 ---
